@@ -1,0 +1,16 @@
+{
+    "authenticators": [
+        {
+            "name": "Registration API Validator",
+            "fileName": "registration-api-validator.js",
+            "description": "Calls an API during registration and stores the result as a user attribute"
+        }
+    ],
+    "mappers": [
+        {
+            "name": "Token Full Name Mapper",
+            "fileName": "token-map-fullname.js",
+            "description": "Maps first and last name attributes"
+        }
+    ]
+}

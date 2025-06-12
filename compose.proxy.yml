@@ -1,0 +1,59 @@
+# Run this to create the acme.json file
+# docker run --rm -v traefik_acme_storage:/data alpine sh -c "touch /data/acme.json && chmod 600 /data/acme.json"
+
+services:
+    traefik:
+        image: traefik:v3.4
+        container_name: traefik
+        command:
+            - "--log.level=INFO"
+            - "--accesslog=true"
+            - "--providers.docker=true"
+            - "--providers.docker.exposedbydefault=false"
+            - "--providers.file.directory=/etc/traefik/dynamic"
+            - "--providers.file.watch=true"
+            - "--entrypoints.web.address=:80"
+            - "--entrypoints.websecure.address=:443"
+            - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+            - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+            - "--entrypoints.websecure.http.middlewares=common-security-headers@file,compress-middleware@file"
+            - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
+            - "--certificatesresolvers.myresolver.acme.storage=/data/acme.json"
+            - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+        ports:
+            - "80:80"
+            - "443:443"
+        volumes:
+            - "/var/run/docker.sock:/var/run/docker.sock:ro"
+            - "traefik_acme_storage:/data"
+            - "./traefik_dynamic.yml:/etc/traefik/dynamic/traefik_dynamic.yml:ro"
+        networks:
+            - proxy-network
+        restart: unless-stopped
+        security_opt:
+            - no-new-privileges:true
+        labels:
+            - "traefik.enable=true"
+
+    otel-collector:
+        image: otel/opentelemetry-collector-contrib:latest
+        container_name: otel-collector
+        restart: unless-stopped
+        command: ["--config=/etc/otelcol-contrib/config.yaml"]
+        volumes:
+            - ./otel-config.yml:/etc/otelcol-contrib/config.yaml:ro
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+            - /var/lib/docker/containers:/var/lib/docker/containers:ro # New: Mount Docker container logs directory
+        networks:
+            - proxy-network
+        environment:
+            - HOSTNAME=macos-i # Explicitly set hostname for clarity in telemetry
+            # GRAFANA_USERNAME and GRAFANA_API_KEY will be picked from the .env file
+
+networks:
+    proxy-network:
+        driver: bridge
+        name: proxy-network
+
+volumes:
+    traefik_acme_storage: {}

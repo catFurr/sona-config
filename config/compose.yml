@@ -1,0 +1,118 @@
+services:
+    prosody:
+        image: jitsi/prosody:stable
+        container_name: prosody
+        restart: unless-stopped
+        ports:
+            # XMPP client port for jvb and jicofo
+            - "5222:5222"
+        expose:
+            # XMPP port for HTTP services (BOSH, websockets)
+            - "5280"
+        healthcheck:
+            test: ["CMD-SHELL", "curl -f http://localhost:5280/health || exit 1"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 60s
+        volumes:
+            # Override the default plugins with our own
+            - ../resources/prosody-plugins/token/util.lib.lua:/prosody-plugins/token/util.lib.lua
+            - ../resources/prosody-plugins/luajwtjitsi.lib.lua:/prosody-plugins/luajwtjitsi.lib.lua
+
+            - ../resources/prosody-plugins/custom:/prosody-plugins-custom
+            - ./custom-prosody.cfg.lua:/config/conf.d/z.cfg.lua
+            # Persistent storage for prosody data
+            - prosody-data:/config/data
+            # Certificates
+            - ./certs:/config/certs
+        env_file:
+            - ./.env
+        environment:
+            # Authentication passwords
+            - JICOFO_AUTH_PASSWORD=${JICOFO_AUTH_PASSWORD}
+            - JVB_AUTH_PASSWORD=${JVB_AUTH_PASSWORD}
+            # Domain configuration (needed for certificate generation and templating)
+            - XMPP_DOMAIN=${XMPP_DOMAIN}
+            - XMPP_AUTH_DOMAIN=${XMPP_AUTH_DOMAIN}
+            - XMPP_MUC_DOMAIN=${XMPP_MUC_DOMAIN}
+            - XMPP_INTERNAL_MUC_DOMAIN=${XMPP_INTERNAL_MUC_DOMAIN}
+            - JVB_AUTH_USER=${JVB_AUTH_USER}
+            - JIBRI_RECORDER_USER=${JIBRI_RECORDER_USER}
+            - JIBRI_XMPP_USER=${JIBRI_XMPP_USER}
+            - JIGASI_XMPP_USER=${JIGASI_XMPP_USER}
+            - XMPP_HIDDEN_DOMAIN=${XMPP_HIDDEN_DOMAIN}
+            # All other configuration is in custom-prosody.cfg.lua
+        networks:
+            - proxy-network
+        labels:
+            - "traefik.enable=true"
+            - "traefik.docker.network=proxy-network"
+
+            # Router for HTTP-BIND (Prosody)
+            - "traefik.http.routers.prosody-http-bind.rule=Host(`${XMPP_DOMAIN}`) && Path(`/http-bind`)"
+            - "traefik.http.routers.prosody-http-bind.entrypoints=websecure"
+            - "traefik.http.routers.prosody-http-bind.tls.certresolver=myresolver"
+            - "traefik.http.services.prosody-http-bind-svc.loadbalancer.server.port=5280"
+
+            # Router for XMPP-WebSocket (Prosody)
+            - "traefik.http.routers.prosody-xmpp-ws.rule=Host(`${XMPP_DOMAIN}`) && Path(`/xmpp-websocket`)"
+            - "traefik.http.routers.prosody-xmpp-ws.entrypoints=websecure"
+            - "traefik.http.routers.prosody-xmpp-ws.tls.certresolver=myresolver"
+            - "traefik.http.services.prosody-xmpp-ws-svc.loadbalancer.server.port=5280"
+
+            # Router for Room Info API (Prosody)
+            - "traefik.http.routers.prosody-room-info.rule=Host(`${XMPP_DOMAIN}`) && PathPrefix(`/_api/room-info`)"
+            - "traefik.http.routers.prosody-room-info.entrypoints=websecure"
+            - "traefik.http.routers.prosody-room-info.tls.certresolver=myresolver"
+            - "traefik.http.routers.prosody-room-info.middlewares=prosody-room-info-rewrite@file"
+            - "traefik.http.services.prosody-room-info-svc.loadbalancer.server.port=5280"
+
+    jicofo:
+        image: jitsi/jicofo:stable
+        container_name: jicofo
+        restart: unless-stopped
+        healthcheck:
+            test: ["CMD-SHELL", "curl -f http://localhost:8888/about/health || exit 1"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 60s
+        volumes:
+            - ./custom-jicofo.conf:/config/custom-jicofo.conf
+        env_file:
+            - ./.env
+        environment:
+            - JICOFO_AUTH_PASSWORD=${JICOFO_AUTH_PASSWORD}
+            # We prefer using the custom-jicofo.conf file to override the default jicofo.conf file
+            - XMPP_AUTH_DOMAIN=${XMPP_AUTH_DOMAIN}
+            - XMPP_DOMAIN=${XMPP_DOMAIN}
+            - XMPP_MUC_DOMAIN=${XMPP_MUC_DOMAIN}
+            - XMPP_INTERNAL_MUC_DOMAIN=${XMPP_INTERNAL_MUC_DOMAIN}
+            - JVB_BREWERY_MUC=JvbBrewery
+            - JICOFO_OCTO_REGION=${JICOFO_OCTO_REGION}
+        networks:
+            - proxy-network
+        depends_on:
+            prosody:
+                condition: service_healthy
+        expose:
+            # REST including metrics, conference-request, etc.
+            - "8888"
+        labels:
+            - "traefik.enable=true"
+            - "traefik.docker.network=proxy-network"
+
+            # Router for Jicofo Conference Request API
+            - "traefik.http.routers.jicofo-conf-req.rule=Host(`${XMPP_DOMAIN}`) && PathPrefix(`/conference-request/v1`)"
+            - "traefik.http.routers.jicofo-conf-req.entrypoints=websecure"
+            - "traefik.http.routers.jicofo-conf-req.tls.certresolver=myresolver"
+            - "traefik.http.routers.jicofo-conf-req.middlewares=jicofo-specific-headers@file"
+            - "traefik.http.services.jicofo-conf-req-svc.loadbalancer.server.port=8888"
+
+volumes:
+    prosody-data:
+
+networks:
+    proxy-network:
+        external: true

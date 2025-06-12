@@ -1,0 +1,51 @@
+http:
+    middlewares:
+        prosody-room-info-rewrite:
+            replacePathRegex:
+                regex: "^/_api/room-info(.*)"
+                replacement: "/room-info$1"
+
+        # Common security headers for most services
+        common-security-headers:
+            headers:
+                stsSeconds: 63072000 # Strict-Transport-Security: max-age= (1 year)
+                stsIncludeSubdomains: true
+                forceSTSHeader: true
+                # stsPreload: true # Consider adding if you submit your domain for HSTS preloading
+                customFrameOptionsValue: "SAMEORIGIN" # X-Frame-Options
+                contentTypeNosniff: true # X-Content-Type-Options
+                browserXssFilter: true # X-XSS-Protection (uses Traefik's default, which is "1; mode=block")
+                customResponseHeaders:
+                    Referrer-Policy: "strict-origin-when-cross-origin"
+
+        # Jicofo specific headers (Cache-Control & CORS)
+        jicofo-specific-headers:
+            headers:
+                customResponseHeaders:
+                    Cache-Control: "no-cache, no-store"
+                    Access-Control-Allow-Origin: "*" # Adjust if a more specific origin is needed
+                    Access-Control-Allow-Methods: "GET, POST, OPTIONS"
+                    Access-Control-Allow-Headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Content-Type"
+
+        # Keycloak specific Content-Security-Policy header
+        keycloak-csp-header:
+            headers:
+                customResponseHeaders:
+                    Content-Security-Policy: "default-src 'self' https:; frame-src 'self' https:; connect-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' https: data:; font-src 'self' https: data:;"
+
+        # Compression middleware for text-based responses
+        compress-middleware:
+            compress: {}
+
+        # Placeholder for common security headers if you decide to centralize them.
+        # common-security-headers:
+        #   headers:
+        #     stsSeconds: 31536000 # Equivalent to max-age=31536000 (1 year)
+        #     forceSTSHeader: true
+        #     stsIncludeSubdomains: true # Add if applicable
+        #     stsPreload: true # Add if applicable
+        #     contentTypeNosniff: true
+        #     browserXssFilter: true
+        #     # Add other headers like FrameDeny, CSP etc. as needed.
+        #     # customFrameOptionsValue: "SAMEORIGIN"
+        #     # contentSecurityPolicy: "default-src 'self' https:; ..."

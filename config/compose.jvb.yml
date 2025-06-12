@@ -1,0 +1,53 @@
+services:
+    jvb:
+        image: jitsi/jvb:stable
+        container_name: jvb
+        restart: unless-stopped
+        healthcheck:
+            test: ["CMD-SHELL", "curl -f http://localhost:8080/debug?full=true || exit 1"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 60s
+        expose:
+            # public API port for colibri websocket
+            - "9090"
+            # private API for control and metrics
+            - "8080"
+        ports:
+            # ICE/UDP port for media
+            - "10000:10000/udp"
+        volumes:
+            - ./custom-jvb.conf:/config/custom-jvb.conf
+        #     - ./entrypoint.sh:/tmp/entrypoint.sh:ro # Mount the entrypoint script
+        # entrypoint: ["sh", "/tmp/entrypoint.sh"]
+        environment:
+            # Authentication (must match what's configured in prosody)
+            - JVB_AUTH_PASSWORD=${JVB_AUTH_PASSWORD}
+
+            - JVB_AUTH_USER=jvb
+            - XMPP_AUTH_DOMAIN=${XMPP_AUTH_DOMAIN}
+            - XMPP_INTERNAL_MUC_DOMAIN=${XMPP_INTERNAL_MUC_DOMAIN}
+            - JVB_BREWERY_MUC=JvbBrewery
+            - XMPP_SERVER=${XMPP_SERVER}
+            - JVB_MUC_NICKNAME=${JVB_MUC_NICKNAME}
+            - ENABLE_OCTO=${ENABLE_OCTO}
+            - JVB_OCTO_REGION=${JVB_OCTO_REGION}
+            - JVB_OCTO_RELAY_ID=${JVB_OCTO_RELAY_ID}
+        networks:
+            - proxy-network # Changed from jitsi-network & proxy-network
+        labels:
+            - "traefik.enable=true"
+            - "traefik.docker.network=proxy-network"
+
+            # Router for JVB Colibri WebSocket
+            # Nginx: location ~ ^/colibri-ws/default-id/(.*)
+            - "traefik.http.routers.jvb-colibri-ws.rule=Host(`${XMPP_DOMAIN}`) && PathPrefix(`/colibri-ws/default-id/`)"
+            - "traefik.http.routers.jvb-colibri-ws.entrypoints=websecure"
+            - "traefik.http.routers.jvb-colibri-ws.tls.certresolver=myresolver"
+            - "traefik.http.services.jvb-colibri-ws-svc.loadbalancer.server.port=9090"
+
+networks:
+    proxy-network:
+        driver: bridge
+        external: true

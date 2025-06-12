@@ -1,0 +1,20 @@
+{
+    "name": "keycloak-webhook-setup",
+    "version": "1.0.0",
+    "description": "Sets up Keycloak webhook event listener",
+    "main": "keycloak-webhook-setup.ts",
+    "scripts": {
+        "start": "ts-node keycloak-webhook-setup.ts"
+    },
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "node-fetch": "^2.7.0"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.19",
+        "@types/node-fetch": "^2.6.11",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.3.3"
+    }
+}
