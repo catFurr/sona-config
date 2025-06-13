@@ -19,8 +19,9 @@ services:
             - "10000:10000/udp"
         volumes:
             - ./custom-jvb.conf:/config/custom-jvb.conf
-        #     - ./entrypoint.sh:/tmp/entrypoint.sh:ro # Mount the entrypoint script
-        # entrypoint: ["sh", "/tmp/entrypoint.sh"]
+            - ./entrypoint.sh:/tmp/entrypoint.sh:ro # Mount the entrypoint script
+            - ../.env:/tmp/env-file:ro # Mount the env file
+        entrypoint: ["sh", "/tmp/entrypoint.sh"]
         environment:
             # Authentication (must match what's configured in prosody)
             - JVB_AUTH_PASSWORD=${JVB_AUTH_PASSWORD}
@@ -35,7 +36,7 @@ services:
             - JVB_OCTO_REGION=${JVB_OCTO_REGION}
             - JVB_OCTO_RELAY_ID=${JVB_OCTO_RELAY_ID}
         networks:
-            - proxy-network # Changed from jitsi-network & proxy-network
+            - proxy-network
         labels:
             - "traefik.enable=true"
             - "traefik.docker.network=proxy-network"
