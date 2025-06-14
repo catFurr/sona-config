@@ -1,138 +1,199 @@
-
 receivers:
-    prometheus:
-        config:
-            scrape_configs:
-                - job_name: "prosody"
-                  scrape_interval: 120s
-                  static_configs:
-                      - targets: ["prosody:5280"] # Assumes Prosody service is named 'prosody' on the Docker network
-                  metrics_path: "/metrics"
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: "prosody"
+          scrape_interval: 120s
+          static_configs:
+            - targets: ["prosody:5280"]
+          metrics_path: "/metrics"
 
-                - job_name: "jicofo"
-                  scrape_interval: 120s
-                  static_configs:
-                      - targets: ["jicofo:8888"] # Assumes Jicofo service is named 'jicofo'
-                  metrics_path: "/metrics"
+        - job_name: "jicofo"
+          scrape_interval: 120s
+          static_configs:
+            - targets: ["jicofo:8888"]
+          metrics_path: "/metrics"
 
-                - job_name: "jvb"
-                  scrape_interval: 120s
-                  static_configs:
-                      - targets: ["jvb:8080"] # Assumes JVB service is named 'jvb'
-                  metrics_path: "/metrics"
+        - job_name: "jvb"
+          scrape_interval: 120s
+          static_configs:
+            - targets: ["jvb:8080"]
+          metrics_path: "/metrics"
 
-                - job_name: "keycloak"
-                  scrape_interval: 180s
-                  static_configs:
-                      - targets: ["keycloak:9000"] # Assumes Keycloak service name and port
-                  metrics_path: "/metrics"
+        - job_name: "keycloak"
+          scrape_interval: 180s
+          static_configs:
+            - targets: ["keycloak:9000"]
+          metrics_path: "/metrics"
 
-                - job_name: "otel-collector"
-                  scrape_interval: 60s
-                  static_configs:
-                      - targets: ["localhost:8889"] # Internal port for collector's metrics
-                  metrics_path: "/metrics"
+  # Docker container stats for automatic container metadata
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+    collection_interval: 60s
+    timeout: 5s
+    api_version: "1.44"
 
-    filelog:
-        include:
-            - /var/lib/docker/containers/*/*-json.log # Standard Docker JSON log files
-        include_file_path: true
-        start_at: end
-        poll_interval: 5s
-        operators:
-            - type: container # Use the new container operator
-              # format: docker # Optional: format can be auto-detected
-              # add_metadata_from_filepath: false # For non-k8s, filepath metadata extraction is less relevant
-        # Add labels for discovered log files to help identify them. These are added to the log record itself.
-        resource:
-            container.name: $$.attributes["log.file.path_resolved"].basename().replace("-json.log", "") # Experimental: trying to get container ID
+  filelog:
+    include:
+      - /var/lib/docker/containers/*/*-json.log
+    include_file_path: true
+    start_at: end
+    poll_interval: 5s
+    operators:
+      # Parse Docker JSON log format
+      - type: json_parser
+        parse_from: body
+        parse_to: attributes
+      # Extract container ID from file path
+      - type: regex_parser
+        regex: "/var/lib/docker/containers/(?P<container_id>[^/]+)/"
+        parse_from: attributes["log.file.path"]
+        parse_to: resource
+      # Store original log message
+      - type: move
+        from: attributes.log
+        to: body
+      # Parse timestamp and store it properly
+      - type: time_parser
+        parse_from: attributes.time
+        layout: "%Y-%m-%dT%H:%M:%S.%fZ"
+      # Store stream info as attribute
+      - type: add
+        field: attributes.stream
+        value: EXPR(attributes.stream)
 
 processors:
-    batch: {}
+  batch: {}
 
-    resourcedetection:
-        detectors: ["env", "system", "docker"]
-        override: false
+  resourcedetection:
+    detectors: ["env", "system", "docker"]
+    override: false
+    timeout: 30s
+    docker:
+      resource_attributes:
+        container.name:
+          enabled: true
+        container.id:
+          enabled: true
+        container.image.name:
+          enabled: true
+        container.image.tag:
+          enabled: true
 
-    transform/drop_unneeded_resource_attributes:
-        error_mode: ignore
-        metric_statements:
-            - context: resource
-              statements:
-                  - delete_key(attributes, "k8s.pod.start_time")
-                  - delete_key(attributes, "os.description")
-                  - delete_key(attributes, "os.type")
-                  - delete_key(attributes, "process.command_args")
-                  - delete_key(attributes, "process.executable.path")
-                  - delete_key(attributes, "process.pid")
-                  - delete_key(attributes, "process.runtime.description")
-                  - delete_key(attributes, "process.runtime.name")
-                  - delete_key(attributes, "process.runtime.version")
-                  # Host related attributes that might be redundant if host.name is present
-                  - delete_key(attributes, "host.arch")
-                  - delete_key(attributes, "host.cpu.model.name")
-                  - delete_key(attributes, "host.cpu.vendor.id")
-                  # Container specific attributes if not needed at this stage
-                  - delete_key(attributes, "container.id")
-                  - delete_key(attributes, "container.image.name")
-                  - delete_key(attributes, "container.image.tag")
-                  - delete_key(attributes, "container.runtime")
+  # Resource processor to set service names automatically
+  resource:
+    attributes:
+      # Set main service name to hostname (server name)
+      - key: service.name
+        value: "${env:HOSTNAME}"
+        action: upsert
+      # Set deployment environment
+      - key: deployment.environment
+        value: "production"
+        action: upsert
 
-    transform/add_resource_attributes_as_metric_attributes:
-        error_mode: ignore
-        metric_statements:
-            - context: datapoint
-              statements:
-                  - set(attributes["deployment.environment"], resource.attributes["deployment.environment"]) # Assuming deployment.environment is an env var
-                  - set(attributes["service.version"], resource.attributes["service.version"]) # Assuming service.version is an env var
-                  - set(attributes["host.name"], resource.attributes["host.name"])
-                  - set(attributes["service.name"], resource.attributes["service.name"])
-        log_statements:
-            - context: resource
-              statements:
-                  - keep_keys(attributes, [
-                    "deployment.environment",
-                    "service.version",
-                    "host.name",
-                    "service.name",
-                    "container.name",
-                    "container.id",
-                    "container.image.name",
-                    "log.file.path_resolved"
-                    ])
+  # Transform processor for metrics - minimal cleanup
+  transform/process_metrics:
+    error_mode: ignore
+    metric_statements:
+      - context: resource
+        statements:
+          # Clean up unnecessary resource attributes
+          - delete_key(resource.attributes, "os.description")
+          - delete_key(resource.attributes, "process.command_args")
+          - delete_key(resource.attributes, "process.executable.path")
+          - delete_key(resource.attributes, "process.pid")
+          - delete_key(resource.attributes, "process.runtime.description")
+          - delete_key(resource.attributes, "process.runtime.name")
+          - delete_key(resource.attributes, "process.runtime.version")
+
+  # Transform processor for logs - clean message extraction
+  transform/process_logs:
+    error_mode: ignore
+    log_statements:
+      - context: resource
+        statements:
+          # Keep service name as hostname, add container name as separate attribute
+          - set(resource.attributes["service.name"], "${env:HOSTNAME}")
+          - set(resource.attributes["deployment.environment"], "production")
+          # Keep essential resource attributes
+          - keep_keys(resource.attributes, [
+            "deployment.environment",
+            "service.name",
+            "host.name",
+            "container.name",
+            "container.id",
+            "container.image.name"
+            ])
+      - context: log
+        statements:
+          # Try to parse structured JSON logs to extract clean message
+          - parse_json(body) where IsMatch(body, "^\\s*\\{.*\\}\\s*$")
+
+          # Extract log level from various possible fields
+          - set(severity_text, attributes["level"]) where attributes["level"] != nil
+          - set(severity_text, attributes["severity"]) where attributes["severity"] != nil
+          - set(severity_text, attributes["levelname"]) where attributes["levelname"] != nil
+          - set(severity_text, attributes["lvl"]) where attributes["lvl"] != nil
+
+          # Extract clean message from JSON logs, fallback to original body
+          - set(body, attributes["message"]) where attributes["message"] != nil
+          - set(body, attributes["msg"]) where attributes["msg"] != nil
+          - set(body, attributes["text"]) where attributes["text"] != nil
+
+          # For structured logs with timestamp, level, file, and message - extract just the message
+          # Example: "2025-06-14T18:27:41.717Z	warn	internal/transaction.go:150	Failed to scrape Prometheus endpoint"
+          - parse_regex(body, "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+Z\\s+(?P<level>\\w+)\\s+(?P<file>[^\\s]+)\\s+(?P<message>.+)$") where IsMatch(body, "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+Z\\s+\\w+\\s+")
+          - set(severity_text, attributes["level"]) where attributes["level"] != nil
+          - set(body, attributes["message"]) where attributes["message"] != nil
+          - set(attributes["source_file"], attributes["file"]) where attributes["file"] != nil
+          - delete_key(attributes, "level")
+          - delete_key(attributes, "file")
+          - delete_key(attributes, "message")
+
+          # Set severity number based on text level
+          - set(severity_number, 5) where severity_text == "DEBUG" or severity_text == "debug" or severity_text == "TRACE" or severity_text == "trace"
+          - set(severity_number, 9) where severity_text == "INFO" or severity_text == "info"
+          - set(severity_number, 13) where severity_text == "WARN" or severity_text == "warn" or severity_text == "WARNING" or severity_text == "warning"
+          - set(severity_number, 17) where severity_text == "ERROR" or severity_text == "error"
+          - set(severity_number, 21) where severity_text == "FATAL" or severity_text == "fatal" or severity_text == "CRITICAL" or severity_text == "critical"
+
+          # Clean up any remaining JSON metadata from the message
+          - parse_regex(body, "^(?P<clean_message>.+?)\\s*\\{.*\\}\\s*$") where IsMatch(body, ".+\\{.*\\}\\s*$")
+          - set(body, attributes["clean_message"]) where attributes["clean_message"] != nil
+          - delete_key(attributes, "clean_message")
 
 exporters:
-    otlphttp/grafana_cloud:
-        endpoint: "https://otlp-gateway-prod-eu-west-2.grafana.net/otlp"
-        auth:
-            authenticator: basicauth/grafana_cloud
+  otlphttp/grafana_cloud:
+    endpoint: "https://otlp-gateway-prod-eu-west-2.grafana.net/otlp"
+    auth:
+      authenticator: basicauth/grafana_cloud
 
 extensions:
-    basicauth/grafana_cloud:
-        client_auth:
-            username: "${GRAFANA_USERNAME}"
-            password: "${GRAFANA_API_KEY}"
+  basicauth/grafana_cloud:
+    client_auth:
+      username: "${GRAFANA_USERNAME}"
+      password: "${GRAFANA_API_KEY}"
 
 service:
-    extensions: [basicauth/grafana_cloud]
-    telemetry:
-        metrics:
-            level: basic
-            address: 0.0.0.0:8889
-    pipelines:
-        metrics:
-            receivers: [prometheus]
-            processors:
-                - resourcedetection
-                - transform/drop_unneeded_resource_attributes
-                - transform/add_resource_attributes_as_metric_attributes
-                - batch
-            exporters: [otlphttp/grafana_cloud]
-        logs:
-            receivers: [filelog]
-            processors:
-                - resourcedetection
-                - transform/drop_unneeded_resource_attributes
-                - transform/add_resource_attributes_as_metric_attributes
-                - batch
-            exporters: [otlphttp/grafana_cloud]
+  extensions: [basicauth/grafana_cloud]
+  telemetry:
+    metrics:
+      level: none
+  pipelines:
+    metrics:
+      receivers: [prometheus, docker_stats]
+      processors:
+        - resourcedetection
+        - resource
+        - transform/process_metrics
+        - batch
+      exporters: [otlphttp/grafana_cloud]
+    logs:
+      receivers: [filelog]
+      processors:
+        - resourcedetection
+        - resource
+        - transform/process_logs
+        - batch
+      exporters: [otlphttp/grafana_cloud]
