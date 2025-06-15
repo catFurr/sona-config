@@ -31,20 +31,13 @@ services:
         environment:
             - CONFIG_OUTPUT_PATH=/config/conf.d/z.cfg.lua
 
-            # Authentication passwords
+            - PROSODY_MODE="client"
             - JICOFO_AUTH_PASSWORD=${JICOFO_AUTH_PASSWORD}
             - JVB_AUTH_PASSWORD=${JVB_AUTH_PASSWORD}
-            # Domain configuration (needed for certificate generation and templating)
-            - XMPP_DOMAIN=${XMPP_DOMAIN}
+            # Domain configuration (needed for registering the components and traefik labels)
             - XMPP_AUTH_DOMAIN=${XMPP_AUTH_DOMAIN}
-            - XMPP_MUC_DOMAIN=${XMPP_MUC_DOMAIN}
-            - XMPP_INTERNAL_MUC_DOMAIN=${XMPP_INTERNAL_MUC_DOMAIN}
+            - XMPP_DOMAIN=${XMPP_DOMAIN}
             - JVB_AUTH_USER=${JVB_AUTH_USER}
-            - JIBRI_RECORDER_USER=${JIBRI_RECORDER_USER}
-            - JIBRI_XMPP_USER=${JIBRI_XMPP_USER}
-            - JIGASI_XMPP_USER=${JIGASI_XMPP_USER}
-            - XMPP_HIDDEN_DOMAIN=${XMPP_HIDDEN_DOMAIN}
-            # All other configuration is in custom-prosody.cfg.lua
         networks:
             - proxy-network
         labels:
@@ -88,14 +81,9 @@ services:
         environment:
             - CONFIG_OUTPUT_PATH=/config/custom-jicofo.conf
 
-            - JICOFO_AUTH_PASSWORD=${JICOFO_AUTH_PASSWORD}
-            # We prefer using the custom-jicofo.conf file to override the default jicofo.conf file
-            - XMPP_AUTH_DOMAIN=${XMPP_AUTH_DOMAIN}
-            - XMPP_DOMAIN=${XMPP_DOMAIN}
-            - XMPP_MUC_DOMAIN=${XMPP_MUC_DOMAIN}
-            - XMPP_INTERNAL_MUC_DOMAIN=${XMPP_INTERNAL_MUC_DOMAIN}
-            - JVB_BREWERY_MUC=JvbBrewery
-            - JICOFO_OCTO_REGION=${JICOFO_OCTO_REGION}
+            - JICOFO_AUTH_PASSWORD="defaultpassword"
+            - XMPP_HIDDEN_DOMAIN=""
+            - XMPP_DOMAIN=${XMPP_DOMAIN}  # For traefik labels
         networks:
             - proxy-network
         depends_on:

@@ -2,7 +2,7 @@
 component_admins_as_room_owners = true
 
 -- domain mapper options, must at least have domain base set to use the mapper
-muc_mapper_domain_base = "meet.sonacove.com";
+muc_mapper_domain_base = "{{ .Env.XMPP_DOMAIN }}";
 
 consider_bosh_secure = true;
 https_ports = { }; -- prevent listening on port 5284
@@ -27,29 +27,29 @@ ssl = {
 }
 
 unlimited_jids = {
-    "focus@auth.meet.sonacove.com",
-    "jvb@auth.meet.sonacove.com"
+    "focus@{{ .Env.XMPP_AUTH_DOMAIN }}",
+    "jvb@{{ .Env.XMPP_AUTH_DOMAIN }}"
 }
 
 -- Cloudflare TURN configuration
-cf_turn_app_id = "${CF_TURN_APP_ID}"
-cf_turn_app_secret = "${CF_TURN_APP_SECRET}"
+cf_turn_app_id = "{{ .Env.CF_TURN_APP_ID }}"
+cf_turn_app_secret = "{{ .Env.CF_TURN_APP_SECRET }}"
 
 -- https://prosody.im/doc/modules/mod_smacks
 smacks_max_unacked_stanzas = 5;
 smacks_hibernation_time = 30;
 smacks_max_old_sessions = 1;
 
-VirtualHost "meet.sonacove.com"
+VirtualHost "{{ .Env.XMPP_DOMAIN }}"
     authentication = "token" -- do not delete me
     -- Properties below are modified by jitsi-meet-tokens package config
     -- and authentication above is switched to "token"
     app_id = "jitsi-meet"
     asap_key_server = true
-    cache_keys_url = "https://auth.sonacove.com/realms/jitsi/protocol/openid-connect/certs"
-    allow_empty_token = false
-    asap_accepted_issuers = { "https://auth.sonacove.com/realms/jitsi" }
+    cache_keys_url = "{{ .Env.KC_HOST_URL }}realms/jitsi/protocol/openid-connect/certs"
+    asap_accepted_issuers = { "{{ .Env.KC_HOST_URL }}realms/jitsi" }
     asap_accepted_audiences = { "jitsi-web", "account" }
+    allow_empty_token = false
     asap_require_room_claim = true
     enable_domain_verification = false
     --app_secret="example_app_secret"
@@ -58,12 +58,12 @@ VirtualHost "meet.sonacove.com"
     -- Note that old-style SSL on port 5223 only supports one certificate, and will always
     -- use the global one.
     ssl = {
-        key = "/config/certs/meet.sonacove.com.key";
-        certificate = "/config/certs/meet.sonacove.com.crt";
+        key = "/config/certs/{{ .Env.XMPP_DOMAIN }}.key";
+        certificate = "/config/certs/{{ .Env.XMPP_DOMAIN }}.crt";
     }
-    av_moderation_component = "avmoderation.meet.sonacove.com"
-    speakerstats_component = "speakerstats.meet.sonacove.com"
-    end_conference_component = "endconference.meet.sonacove.com"
+    av_moderation_component = "avmoderation.{{ .Env.XMPP_DOMAIN }}"
+    speakerstats_component = "speakerstats.{{ .Env.XMPP_DOMAIN }}"
+    end_conference_component = "endconference.{{ .Env.XMPP_DOMAIN }}"
     modules_enabled = {
         "bosh";
         "websocket";
@@ -82,18 +82,18 @@ VirtualHost "meet.sonacove.com"
         "room_metadata";
     }
     c2s_require_encryption = false
-    lobby_muc = "lobby.meet.sonacove.com"
-    breakout_rooms_muc = "breakout.meet.sonacove.com"
-    room_metadata_component = "metadata.meet.sonacove.com"
-    main_muc = "conference.meet.sonacove.com"
-    -- muc_lobby_whitelist = { "recorder.meet.sonacove.com" } -- Here we can whitelist jibri to enter lobby enabled rooms
+    lobby_muc = "lobby.{{ .Env.XMPP_DOMAIN }}"
+    breakout_rooms_muc = "breakout.{{ .Env.XMPP_DOMAIN }}"
+    room_metadata_component = "metadata.{{ .Env.XMPP_DOMAIN }}"
+    main_muc = "{{ .Env.XMPP_MUC_DOMAIN }}"
+    -- muc_lobby_whitelist = { "{{ .Env.XMPP_HIDDEN_DOMAIN }}" } -- Here we can whitelist jibri to enter lobby enabled rooms
     smacks_max_hibernated_sessions = 1
 
-VirtualHost "guest.meet.sonacove.com"
+VirtualHost "guest.{{ .Env.XMPP_DOMAIN }}"
     authentication = "anonymous"
     c2s_require_encryption = false
 
-Component "conference.meet.sonacove.com" "muc"
+Component "{{ .Env.XMPP_MUC_DOMAIN }}" "muc"
     restrict_room_creation = true
     storage = "memory"
     modules_enabled = {
@@ -105,14 +105,14 @@ Component "conference.meet.sonacove.com" "muc"
         "muc_rate_limit";
         "muc_password_whitelist";
     }
-    admins = { "focus@auth.meet.sonacove.com" }
+    admins = { "focus@{{ .Env.XMPP_AUTH_DOMAIN }}" }
     muc_password_whitelist = {
-        "focus@auth.meet.sonacove.com"
+        "focus@{{ .Env.XMPP_AUTH_DOMAIN }}"
     }
     muc_room_locking = false
     muc_room_default_public_jids = true
 
-Component "breakout.meet.sonacove.com" "muc"
+Component "breakout.{{ .Env.XMPP_DOMAIN }}" "muc"
     restrict_room_creation = true
     storage = "memory"
     modules_enabled = {
@@ -122,25 +122,25 @@ Component "breakout.meet.sonacove.com" "muc"
         "muc_rate_limit";
         "polls";
     }
-    admins = { "focus@auth.meet.sonacove.com" }
+    admins = { "focus@{{ .Env.XMPP_AUTH_DOMAIN }}" }
     muc_room_locking = false
     muc_room_default_public_jids = true
 
 -- internal muc component
-Component "internal.auth.meet.sonacove.com" "muc"
+Component "{{ .Env.XMPP_INTERNAL_MUC_DOMAIN }}" "muc"
     storage = "memory"
     modules_enabled = {
         "muc_hide_all";
         "ping";
     }
-    admins = { "focus@auth.meet.sonacove.com", "jvb@auth.meet.sonacove.com" }
+    admins = { "focus@{{ .Env.XMPP_AUTH_DOMAIN }}", "jvb@{{ .Env.XMPP_AUTH_DOMAIN }}" }
     muc_room_locking = false
     muc_room_default_public_jids = true
 
-VirtualHost "auth.meet.sonacove.com"
+VirtualHost "{{ .Env.XMPP_AUTH_DOMAIN }}"
     ssl = {
-        key = "/config/certs/auth.meet.sonacove.com.key";
-        certificate = "/config/certs/auth.meet.sonacove.com.crt";
+        key = "/config/certs/{{ .Env.XMPP_AUTH_DOMAIN }}.key";
+        certificate = "/config/certs/{{ .Env.XMPP_AUTH_DOMAIN }}.crt";
     }
     modules_enabled = {
         "limits_exception";
@@ -149,7 +149,7 @@ VirtualHost "auth.meet.sonacove.com"
     authentication = "internal_hashed"
     smacks_hibernation_time = 15;
 
-VirtualHost "recorder.meet.sonacove.com"
+VirtualHost "{{ .Env.XMPP_HIDDEN_DOMAIN }}"
     modules_enabled = {
       "smacks";
     }
@@ -157,19 +157,19 @@ VirtualHost "recorder.meet.sonacove.com"
     smacks_max_old_sessions = 2000;
 
 -- Proxy to jicofo's user JID, so that it doesn't have to register as a component.
-Component "focus.meet.sonacove.com" "client_proxy"
-    target_address = "focus@auth.meet.sonacove.com"
+Component "focus.{{ .Env.XMPP_DOMAIN }}" "client_proxy"
+    target_address = "focus@{{ .Env.XMPP_AUTH_DOMAIN }}"
 
-Component "speakerstats.meet.sonacove.com" "speakerstats_component"
-    muc_component = "conference.meet.sonacove.com"
+Component "speakerstats.{{ .Env.XMPP_DOMAIN }}" "speakerstats_component"
+    muc_component = "{{ .Env.XMPP_MUC_DOMAIN }}"
 
-Component "endconference.meet.sonacove.com" "end_conference"
-    muc_component = "conference.meet.sonacove.com"
+Component "endconference.{{ .Env.XMPP_DOMAIN }}" "end_conference"
+    muc_component = "{{ .Env.XMPP_MUC_DOMAIN }}"
 
-Component "avmoderation.meet.sonacove.com" "av_moderation_component"
-    muc_component = "conference.meet.sonacove.com"
+Component "avmoderation.{{ .Env.XMPP_DOMAIN }}" "av_moderation_component"
+    muc_component = "{{ .Env.XMPP_MUC_DOMAIN }}"
 
-Component "lobby.meet.sonacove.com" "muc"
+Component "lobby.{{ .Env.XMPP_DOMAIN }}" "muc"
     storage = "memory"
     restrict_room_creation = true
     muc_room_locking = false
@@ -180,6 +180,6 @@ Component "lobby.meet.sonacove.com" "muc"
         "polls";
     }
 
-Component "metadata.meet.sonacove.com" "room_metadata_component"
-    muc_component = "conference.meet.sonacove.com"
-    breakout_rooms_component = "breakout.meet.sonacove.com"
+Component "metadata.{{ .Env.XMPP_DOMAIN }}" "room_metadata_component"
+    muc_component = "{{ .Env.XMPP_MUC_DOMAIN }}"
+    breakout_rooms_component = "breakout.{{ .Env.XMPP_DOMAIN }}"
