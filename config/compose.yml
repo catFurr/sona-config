@@ -17,18 +17,20 @@ services:
             start_period: 60s
         volumes:
             # Override the default plugins with our own
-            - ../resources/prosody-plugins/token/util.lib.lua:/prosody-plugins/token/util.lib.lua
-            - ../resources/prosody-plugins/luajwtjitsi.lib.lua:/prosody-plugins/luajwtjitsi.lib.lua
-
-            - ../resources/prosody-plugins/custom:/prosody-plugins-custom
-            - ./custom-prosody.cfg.lua:/config/conf.d/z.cfg.lua
+            - ../prosody-plugins/token/util.lib.lua:/prosody-plugins/token/util.lib.lua
+            - ../prosody-plugins/luajwtjitsi.lib.lua:/prosody-plugins/luajwtjitsi.lib.lua
+            - ../prosody-plugins/custom:/prosody-plugins-custom
             # Persistent storage for prosody data
             - prosody-data:/config/data
             # Certificates
             - ./certs:/config/certs
-        env_file:
-            - ./.env
+            - ./custom-prosody.cfg.lua:/tmp/custom-conf.tpl:ro
+            - ../entrypoint.sh:/tmp/entrypoint.sh:ro
+            - ../.env:/tmp/env-file:ro
+        entrypoint: ["sh", "/tmp/entrypoint.sh"]
         environment:
+            - CONFIG_OUTPUT_PATH=/config/conf.d/z.cfg.lua
+
             # Authentication passwords
             - JICOFO_AUTH_PASSWORD=${JICOFO_AUTH_PASSWORD}
             - JVB_AUTH_PASSWORD=${JVB_AUTH_PASSWORD}
@@ -79,10 +81,13 @@ services:
             retries: 3
             start_period: 60s
         volumes:
-            - ./custom-jicofo.conf:/config/custom-jicofo.conf
-        env_file:
-            - ./.env
+            - ./custom-jicofo.conf:/tmp/custom-conf.tpl:ro
+            - ../entrypoint.sh:/tmp/entrypoint.sh:ro
+            - ../.env:/tmp/env-file:ro
+        entrypoint: ["sh", "/tmp/entrypoint.sh"]
         environment:
+            - CONFIG_OUTPUT_PATH=/config/custom-jicofo.conf
+
             - JICOFO_AUTH_PASSWORD=${JICOFO_AUTH_PASSWORD}
             # We prefer using the custom-jicofo.conf file to override the default jicofo.conf file
             - XMPP_AUTH_DOMAIN=${XMPP_AUTH_DOMAIN}

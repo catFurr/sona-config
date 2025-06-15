@@ -19,8 +19,8 @@ services:
       # ICE/UDP port for media
       - "10000:10000/udp"
     volumes:
-      - ./custom-jvb.conf:/tmp/custom-jvb.conf.tpl:ro # Mount template file
-      - ./entrypoint.sh:/tmp/entrypoint.sh:ro # Mount the entrypoint script
+      - ./custom-jvb.conf:/tmp/custom-conf.tpl:ro # Mount template file
+      - ../entrypoint.sh:/tmp/entrypoint.sh:ro # Mount the entrypoint script
       - ../.env:/tmp/env-file:ro # Mount the env file
     entrypoint: ["sh", "/tmp/entrypoint.sh"]
     environment:
@@ -33,6 +33,9 @@ services:
       - LOCAL_ADDRESS="0.0.0.0"
       - SENTRY_RELEASE="false"
       - JVB_INSTANCE_ID="jvb-instance-id"
+
+      # Custom config output path (optional - defaults to /config/custom-jvb.conf)
+      - CONFIG_OUTPUT_PATH="/config/custom-jvb.conf"
     networks:
       - proxy-network
     labels:

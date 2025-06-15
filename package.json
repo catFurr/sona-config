@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "fetch-config": "cd videobridge && bun run fetch_config_defaults.ts"
+    "fetch-config": "bun run config-tools/main.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"

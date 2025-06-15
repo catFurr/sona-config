@@ -33,3 +33,4 @@ Component "{{ $JVB_XMPP_INTERNAL_MUC_DOMAIN }}" "muc"
     muc_filter_whitelist="{{ $JVB_XMPP_AUTH_DOMAIN }}"
     muc_room_locking = false
     muc_room_default_public_jids = true
+
