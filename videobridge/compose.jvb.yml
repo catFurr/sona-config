@@ -25,25 +25,27 @@ services:
     entrypoint: ["sh", "/tmp/entrypoint.sh"]
     environment:
       - CONFIG_OUTPUT_PATH="/config/custom-jvb.conf"
-      - JVB_SERVER=${JVB_SERVER}  # Used by traefik labels
 
       - JVB_AUTH_PASSWORD="defaultpassword"
       - XMPP_SERVER="meet.example.com"
+      - XMPP_DOMAIN=${XMPP_DOMAIN} # Used for traefik labels
       - JVB_WS_SERVER_ID_FALLBACK=""
       - JVB_ADVERTISE_IPS=""
       - LOCAL_ADDRESS="0.0.0.0"
-      - JVB_INSTANCE_ID="jvb-instance-id"
+      - JVB_INSTANCE_ID=${JVB_INSTANCE_ID:-jvb-001}
     networks:
       - proxy-network
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy-network"
 
-      # Router for JVB Colibri WebSocket
-      # Nginx: location ~ ^/colibri-ws/default-id/(.*)
-      - "traefik.http.routers.jvb-colibri-ws.rule=Host(`${JVB_SERVER}`) && PathPrefix(`/colibri-ws/default-id/`)"
+      # Router for JVB Colibri WebSocket (Path-based routing through main domain)
+      - "traefik.http.routers.jvb-colibri-ws.rule=Host(`${XMPP_DOMAIN}`) && PathPrefix(`/colibri-ws/${JVB_INSTANCE_ID}/`)"
+      - "traefik.http.middlewares.jvb-${JVB_INSTANCE_ID}-path-strip.stripPrefix.prefixes=/colibri-ws/${JVB_INSTANCE_ID}"
+      - "traefik.http.routers.jvb-colibri-ws.middlewares=jvb-${JVB_INSTANCE_ID}-path-strip"
       - "traefik.http.routers.jvb-colibri-ws.entrypoints=websecure"
       - "traefik.http.routers.jvb-colibri-ws.tls.certresolver=myresolver"
+      - "traefik.http.routers.jvb-colibri-ws.service=jvb-colibri-ws-svc"
       - "traefik.http.services.jvb-colibri-ws-svc.loadbalancer.server.port=9090"
 
 networks:
