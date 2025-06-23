@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
-import { rm, exists } from "fs/promises";
-import { dirname, join } from "path";
+import { rm, exists, mkdir } from "fs/promises";
+import { dirname, join, resolve } from "path";
 import { downloadFiles } from "./downloader.js";
 import { loadEnvironmentVariables, compileConfigWithDocker } from "./compiler.js";
 import { ConfigComparator } from "./comparator.js";
@@ -19,12 +19,23 @@ const PATHS = {
   jvbReference: join(__dirname, "../videobridge/reference/"),
   jicofoReference: join(__dirname, "../config/jicofoReference/"),
   prosodyReference: join(__dirname, "../config/prosodyReference/"),
-  tempWorkDir: join(__dirname, "./temp-work"),
-  composeFile: join(__dirname, "./compose.jvb.yml"),
+  buildDir: resolve(__dirname, "./build"),
   envFile: join(__dirname, "../.env"),
   customConfig: join(__dirname, "./custom-jvb.conf"),
-  compiledConfig: join(__dirname, "./temp-work/jvb.conf.compiled"),
+
+  composeJvb: "",
+  composeProsody: "",
+
+  compiledJvbConfig: "",
+  compiledJicofoConfig: "",
+  compiledProsodyConfig: "",
 };
+
+PATHS.composeJvb = join(PATHS.jvbReference, "../compose.jvb.yml");
+PATHS.composeProsody = join(PATHS.prosodyReference, "../compose.yml");
+PATHS.compiledJvbConfig = join(PATHS.buildDir, "jvb.conf.compiled");
+PATHS.compiledJicofoConfig = join(PATHS.buildDir, "jicofo.conf.compiled");
+PATHS.compiledProsodyConfig = join(PATHS.buildDir, "prosody.conf.compiled");
 
 const jvbReferenceTargets: DownloadTarget[] = [
   {
@@ -98,6 +109,9 @@ class ConfigSyncManager {
     console.log("🚀 Starting config update process...\n");
 
     try {
+      // Step 0: Create build directory if needed
+      await mkdir(PATHS.buildDir, { recursive: true });
+
       // Step 1: Download all reference and build context files
       await this.downloadResources();
 
@@ -113,7 +127,7 @@ class ConfigSyncManager {
       throw error;
     } finally {
       // Always cleanup temp files
-      await this.cleanup();
+      // await this.cleanup();
     }
   }
 
@@ -131,24 +145,57 @@ class ConfigSyncManager {
   private async compileConfig(): Promise<void> {
     console.log("\n🔧 Loading environment variables and compiling config...");
 
-    // Load environment variables from compose file and .env
-    const envVars = await loadEnvironmentVariables(
-      PATHS.composeFile,
-      PATHS.envFile
-    );
+    async function compileWithEnv(
+      composeFile: string,
+      containerName: string,
+      templatePath: string,
+      outputPath: string,
+    ) {
+      // Load environment variables from compose file and .env
+      const envVars = await loadEnvironmentVariables(
+        containerName,
+        composeFile,
+        PATHS.envFile
+      );
 
-    // Compile config using Docker
-    await compileConfigWithDocker({
-      envVars,
-      templatePath: join(PATHS.jvbReference, "jvb.conf"),
-      outputPath: PATHS.compiledConfig,
-    });
+      // Compile config using Docker
+      await compileConfigWithDocker({
+        envVars,
+        templatePath,
+        outputPath,
+      });
+    }
+
+    await compileWithEnv(
+      PATHS.composeJvb,
+      "jvb",
+      join(PATHS.jvbReference, "jvb.conf"),
+      PATHS.compiledJvbConfig,
+    );
+    await compileWithEnv(
+      PATHS.composeProsody,
+      "prosody",
+      join(PATHS.prosodyReference, "prosody.cfg.lua"),
+      PATHS.compiledProsodyConfig,
+    );
+    await compileWithEnv(
+      PATHS.composeProsody,
+      "prosody",
+      join(PATHS.prosodyReference, "jitsi-meet.cfg.lua"),
+      PATHS.compiledProsodyConfig + ".jitsi-meet",
+    );
+    await compileWithEnv(
+      PATHS.composeProsody,
+      "jicofo",
+      join(PATHS.jicofoReference, "jicofo.conf"),
+      PATHS.compiledJicofoConfig,
+    );
   }
 
   private async compareConfigs(): Promise<void> {
     // Compare compiled config with custom config and update if needed
     await this.comparator.compareAndUpdateConfig({
-      compiledConfigPath: PATHS.compiledConfig,
+      compiledConfigPath: PATHS.compiledJvbConfig,
       customConfigPath: PATHS.customConfig,
       updateConfig: true,
     });
@@ -156,7 +203,7 @@ class ConfigSyncManager {
 
   private async cleanup(): Promise<void> {
     try {
-      const tempDir = PATHS.tempWorkDir;
+      const tempDir = PATHS.buildDir;
       if (await exists(tempDir)) {
         await rm(tempDir, { recursive: true, force: true });
         console.log("🧹 Cleaned up temporary files");

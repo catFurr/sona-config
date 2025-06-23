@@ -24,12 +24,13 @@ services:
       - prosody-data:/config/data
       # Certificates
       - ./certs:/config/certs
+      - ./custom-prosodyBase.cfg.lua:/config/conf.d/z.cfg.lua
       - ./custom-prosody.cfg.lua:/tmp/custom-conf.tpl:ro
       - ../entrypoint.sh:/tmp/entrypoint.sh:ro
       - ../.env:/tmp/env-file:ro
     entrypoint: ["sh", "/tmp/entrypoint.sh"]
     environment:
-      - CONFIG_OUTPUT_PATH=/config/conf.d/z.cfg.lua
+      - CONFIG_OUTPUT_PATH=/config/conf.d/zz.cfg.lua
 
       - PROSODY_MODE="client"
       - JICOFO_AUTH_PASSWORD=${JICOFO_AUTH_PASSWORD}

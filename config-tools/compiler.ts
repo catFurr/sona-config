@@ -1,4 +1,4 @@
-import { mkdir, writeFile, readFile, exists } from "fs/promises";
+import { mkdir, writeFile, readFile, exists, rm } from "fs/promises";
 import { join } from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
@@ -37,36 +37,8 @@ async function loadFromEnvFile(
     return loadedCount;
 }
 
-function applyFallbackValues(
-    envVarsNeeded: Set<string>,
-    envVars: Record<string, string>
-  ): number {
-    const fallbackValues: Record<string, string> = {
-      JVB_AUTH_PASSWORD: "defaultpassword",
-      XMPP_SERVER: "xmpp.meet.example.com",
-    };
-
-    let fallbacksUsed = 0;
-    for (const varName of envVarsNeeded) {
-      if (!envVars[varName]) {
-        if (fallbackValues[varName]) {
-          envVars[varName] = fallbackValues[varName];
-          console.log(
-            `   📝 Using fallback for ${varName} = "${fallbackValues[varName]}"`
-          );
-          fallbacksUsed++;
-        } else {
-          console.log(
-            `   ⚠️  No fallback available for ${varName}, leaving empty`
-          );
-          envVars[varName] = "";
-        }
-      }
-    }
-    return fallbacksUsed;
-}
-
 export async function loadEnvironmentVariables(
+  containerName: string,
   composeFilePath: string,
   envFilePath?: string
 ): Promise<Record<string, string>> {
@@ -80,9 +52,9 @@ export async function loadEnvironmentVariables(
   const envVarsNeedingLookup = new Set<string>();
 
   // Extract environment variables from compose file
-  const jvbService = composeData?.services?.jvb;
-  if (jvbService?.environment) {
-    for (const envEntry of jvbService.environment) {
+  const containerService = composeData?.services?.[containerName];
+  if (containerService?.environment) {
+    for (const envEntry of containerService.environment) {
       if (typeof envEntry === "string") {
         const equalIndex = envEntry.indexOf("=");
         if (equalIndex > 0) {
@@ -124,15 +96,9 @@ export async function loadEnvironmentVariables(
     console.log(`   📋 Loaded ${loadedFromEnv} variables from .env file`);
   } else if (envFilePath) {
     console.log(
-      "   ⚠️  No .env file found, will use fallback values if needed"
+      "   ⚠️  No .env file found, variables will be left empty"
     );
   }
-
-  // Add fallback values for missing variables
-  const fallbacksUsed = applyFallbackValues(
-    envVarsNeedingLookup,
-    envVars
-  );
 
   console.log(
     `   ✅ Total environment variables loaded: ${Object.keys(envVars).length}`
@@ -143,7 +109,8 @@ export async function loadEnvironmentVariables(
 export async function compileConfigWithDocker(options: CompilationOptions): Promise<void> {
   console.log("🐳 Compiling config with Docker...");
 
-  const tempDir = "./temp-work";
+  // Create random temp directory, delete before exiting
+  const tempDir = "./temp-work/" + Math.random().toString(36).substring(2, 15);
   await mkdir(tempDir, { recursive: true });
 
   // Create environment file for Docker
@@ -187,5 +154,8 @@ export async function compileConfigWithDocker(options: CompilationOptions): Prom
     throw new Error(
       "Failed to compile config with Docker. This is required for the script to work correctly."
     );
+  } finally {
+    // Delete temp directory
+    await rm(tempDir, { recursive: true });
   }
 }

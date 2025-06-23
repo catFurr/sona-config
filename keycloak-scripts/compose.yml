@@ -31,6 +31,10 @@ services:
             KC_CLIENT_SECRET: ${KC_CLIENT_SECRET} # Client secret for realm configuration
             KC_REALM_NAME: ${KC_REALM_NAME:-jitsi} # Pass realm name for entrypoint script
 
+            KC_LOG: console
+            KC_LOG_CONSOLE_COLOR: true
+            # KC_LOG_CONSOLE_LEVEL: debug
+            # KC_LOG_LEVEL: debug
         entrypoint: ["/opt/keycloak/entrypoint.sh"]
         command:
             [

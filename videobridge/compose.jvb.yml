@@ -24,13 +24,13 @@ services:
       - ../.env:/tmp/env-file:ro # Mount the env file
     entrypoint: ["sh", "/tmp/entrypoint.sh"]
     environment:
-      - CONFIG_OUTPUT_PATH="/config/custom-jvb.conf"
+      - CONFIG_OUTPUT_PATH=/config/custom-jvb.conf
 
       - JVB_AUTH_PASSWORD="defaultpassword"
       - XMPP_SERVER="meet.example.com"
       - XMPP_DOMAIN=${XMPP_DOMAIN} # Used for traefik labels
-      - JVB_WS_SERVER_ID_FALLBACK=""
-      - JVB_ADVERTISE_IPS=""
+      - JVB_WS_SERVER_ID_FALLBACK="false"
+      - JVB_ADVERTISE_IPS="false"
       - LOCAL_ADDRESS="0.0.0.0"
       - JVB_INSTANCE_ID=${JVB_INSTANCE_ID:-jvb-001}
     networks:
