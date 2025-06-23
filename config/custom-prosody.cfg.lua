@@ -1,10 +1,4 @@
 
--- https://ssl-config.mozilla.org/#server=haproxy&version=2.1&config=intermediate&openssl=1.1.0g&guideline=5.4
-ssl = {
-    protocol = "tlsv1_2+";
-    ciphers = "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384";
-}
-
 -- domain mapper options, must at least have domain base set to use the mapper
 muc_mapper_domain_base = "{{ .Env.XMPP_DOMAIN }}";
 muc_mapper_domain_prefix = "";
@@ -56,14 +50,6 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
     allow_empty_token = false
     enable_domain_verification = false
     -- app_secret="example_app_secret"
-    -- Assign this host a certificate for TLS, otherwise it would use the one
-    -- set in the global section (if any).
-    -- Note that old-style SSL on port 5223 only supports one certificate, and will always
-    -- use the global one.
-    ssl = {
-        key = "/config/certs/{{ .Env.XMPP_DOMAIN }}.key";
-        certificate = "/config/certs/{{ .Env.XMPP_DOMAIN }}.crt";
-    }
     av_moderation_component = "avmoderation.{{ .Env.XMPP_DOMAIN }}"
     speakerstats_component = "speakerstats.{{ .Env.XMPP_DOMAIN }}"
     end_conference_component = "endconference.{{ .Env.XMPP_DOMAIN }}"
@@ -120,22 +106,20 @@ Component "{{ .Env.XMPP_MUC_DOMAIN }}" "muc"
     muc_tombstones = false
     muc_room_allow_persistent = false
 
-Component "breakout.{{ .Env.XMPP_DOMAIN }}" "muc"
-    storage = "memory"
+VirtualHost "{{ .Env.XMPP_AUTH_DOMAIN }}"
     modules_enabled = {
-        "muc_hide_all";
-        "muc_meeting_id";
-        "muc_domain_mapper";
-        "muc_rate_limit";
-        "polls";
+        "limits_exception";
+        "smacks";
     }
-    admins = { "focus@{{ .Env.XMPP_AUTH_DOMAIN }}" }
-    restrict_room_creation = true
-    muc_room_locking = false
-    muc_room_default_public_jids = true
-    muc_room_cache_size = 10000
-    muc_tombstones = false
-    muc_room_allow_persistent = false
+    authentication = "internal_hashed"
+    smacks_hibernation_time = 15;
+
+VirtualHost "{{ .Env.XMPP_HIDDEN_DOMAIN }}"
+    modules_enabled = {
+      "smacks";
+    }
+    authentication = "internal_hashed"
+    smacks_max_old_sessions = 2000;
 
 -- internal muc component
 Component "{{ .Env.XMPP_INTERNAL_MUC_DOMAIN }}" "muc"
@@ -154,38 +138,6 @@ Component "{{ .Env.XMPP_INTERNAL_MUC_DOMAIN }}" "muc"
     muc_tombstones = false
     muc_room_allow_persistent = false
 
-VirtualHost "{{ .Env.XMPP_AUTH_DOMAIN }}"
-    ssl = {
-        key = "/config/certs/{{ .Env.XMPP_AUTH_DOMAIN }}.key";
-        certificate = "/config/certs/{{ .Env.XMPP_AUTH_DOMAIN }}.crt";
-    }
-    modules_enabled = {
-        "limits_exception";
-        "smacks";
-    }
-    authentication = "internal_hashed"
-    smacks_hibernation_time = 15;
-
-VirtualHost "{{ .Env.XMPP_HIDDEN_DOMAIN }}"
-    modules_enabled = {
-      "smacks";
-    }
-    authentication = "internal_hashed"
-    smacks_max_old_sessions = 2000;
-
--- Proxy to jicofo's user JID, so that it doesn't have to register as a component.
-Component "focus.{{ .Env.XMPP_DOMAIN }}" "client_proxy"
-    target_address = "focus@{{ .Env.XMPP_AUTH_DOMAIN }}"
-
-Component "speakerstats.{{ .Env.XMPP_DOMAIN }}" "speakerstats_component"
-    muc_component = "{{ .Env.XMPP_MUC_DOMAIN }}"
-
-Component "endconference.{{ .Env.XMPP_DOMAIN }}" "end_conference"
-    muc_component = "{{ .Env.XMPP_MUC_DOMAIN }}"
-
-Component "avmoderation.{{ .Env.XMPP_DOMAIN }}" "av_moderation_component"
-    muc_component = "{{ .Env.XMPP_MUC_DOMAIN }}"
-
 Component "lobby.{{ .Env.XMPP_DOMAIN }}" "muc"
     storage = "memory"
     modules_enabled = {
@@ -199,6 +151,36 @@ Component "lobby.{{ .Env.XMPP_DOMAIN }}" "muc"
     muc_tombstones = false
     muc_room_allow_persistent = false
     muc_room_cache_size = 10000
+
+Component "breakout.{{ .Env.XMPP_DOMAIN }}" "muc"
+    storage = "memory"
+    modules_enabled = {
+        "muc_hide_all";
+        "muc_meeting_id";
+        "muc_domain_mapper";
+        "muc_rate_limit";
+        "polls";
+    }
+    admins = { "focus@{{ .Env.XMPP_AUTH_DOMAIN }}" }
+    restrict_room_creation = true
+    muc_room_locking = false
+    muc_room_default_public_jids = true
+    muc_room_cache_size = 10000
+    muc_tombstones = false
+    muc_room_allow_persistent = false
+
+-- Proxy to jicofo's user JID, so that it doesn't have to register as a component.
+Component "focus.{{ .Env.XMPP_DOMAIN }}" "client_proxy"
+    target_address = "focus@{{ .Env.XMPP_AUTH_DOMAIN }}"
+
+Component "speakerstats.{{ .Env.XMPP_DOMAIN }}" "speakerstats_component"
+    muc_component = "{{ .Env.XMPP_MUC_DOMAIN }}"
+
+Component "endconference.{{ .Env.XMPP_DOMAIN }}" "end_conference"
+    muc_component = "{{ .Env.XMPP_MUC_DOMAIN }}"
+
+Component "avmoderation.{{ .Env.XMPP_DOMAIN }}" "av_moderation_component"
+    muc_component = "{{ .Env.XMPP_MUC_DOMAIN }}"
 
 Component "metadata.{{ .Env.XMPP_DOMAIN }}" "room_metadata_component"
     muc_component = "{{ .Env.XMPP_MUC_DOMAIN }}"

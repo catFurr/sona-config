@@ -22,6 +22,7 @@ modules_enabled = {
 
 	-- Admin interfaces
 	"admin_adhoc"; -- Allows administration via an XMPP client that supports ad-hoc commands
+	"admin_shell";
 	-- "admin_telnet"; -- Opens telnet console interface on localhost port 5582
 
 	-- Nice to have
@@ -158,3 +159,5 @@ unbound = {
 data_path = "/config/data"
 
 plugin_paths = { "/prosody-plugins/", "/prosody-plugins-custom", "/prosody-plugins-contrib" }
+
+Include "conf.d/*.cfg.lua"
