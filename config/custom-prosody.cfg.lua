@@ -69,6 +69,7 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
         "features_identity";
 
         "cf_turncredentials"; -- Support CF TURN/STUN
+        "firstowner";
     }
     c2s_require_encryption = true
     main_muc = "{{ .Env.XMPP_MUC_DOMAIN }}"
@@ -86,6 +87,7 @@ Component "{{ .Env.XMPP_MUC_DOMAIN }}" "muc"
     restrict_room_creation = true
     storage = "memory"
     modules_enabled = {
+        "firstowner";
         "muc_hide_all";
         "muc_meeting_id";
         "muc_domain_mapper";
