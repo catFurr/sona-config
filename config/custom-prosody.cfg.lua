@@ -69,6 +69,7 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
         "features_identity";
 
         "cf_turncredentials"; -- Support CF TURN/STUN
+        "check_subscription";
     }
     c2s_require_encryption = true
     main_muc = "{{ .Env.XMPP_MUC_DOMAIN }}"

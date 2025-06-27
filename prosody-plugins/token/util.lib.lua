@@ -389,14 +389,6 @@ function Util:process_and_verify_token(session)
             return false, "not-allowed", 'jwt missing required context claim';
         end
 
-        if claims["context"] == nil or
-           claims["context"]["user"] == nil or
-           (claims["context"]["user"]["subscription_status"] ~= "active" and
-            claims["context"]["user"]["subscription_status"] ~= "trialing") then
-            -- module:log("error", "User %s is not an active or trialing subscriber", claims["email"]);
-            return false, "not-allowed", 'user is not an active or trialing subscriber';
-        end
-
         return true;
     else
         return false, "not-allowed", msg;
