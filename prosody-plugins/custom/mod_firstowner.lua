@@ -1,36 +1,60 @@
 module:log("info", "mod_firstowner loaded: will assign moderator to first room participant");
 
--- Test if module is properly loaded
-module:hook("module-loaded", function(event)
-    module:log("info", "mod_firstowner: module-loaded hook triggered for module: %s", event.module or "unknown");
-end);
+-- Test all possible MUC hooks to see which ones are triggered
+local test_hooks = {
+    "muc-room-created",
+    "muc-room-pre-create", 
+    "muc-room-destroyed",
+    "muc-occupant-pre-join",
+    "muc-occupant-about-to-join",
+    "muc-occupant-joined",
+    "muc-occupant-left",
+    "muc-occupant-kicked",
+    "muc-occupant-banned",
+    "muc-occupant-affiliation-changed",
+    "muc-occupant-role-changed",
+    "muc-occupant-nick-changed",
+    "muc-occupant-available",
+    "muc-occupant-unavailable",
+    "muc-occupant-presence",
+    "muc-occupant-message",
+    "muc-occupant-iq",
+    "muc-occupant-subscription",
+    "muc-occupant-subscribed",
+    "muc-occupant-unsubscribe",
+    "muc-occupant-unsubscribed"
+}
 
--- Test if the module is being initialized
-module:hook("module-initialized", function(event)
-    module:log("info", "mod_firstowner: module-initialized hook triggered for module: %s", event.module or "unknown");
-end);
-
--- Test if presence events are being processed
-module:hook("pre-presence", function(event)
-    module:log("info", "mod_firstowner: pre-presence hook triggered");
-    if event.stanza then
-        module:log("info", "mod_firstowner: presence stanza type: %s", event.stanza.attr.type or "none");
-    end
-end);
-
--- Test if message events are being processed
-module:hook("pre-message", function(event)
-    if event.stanza and event.stanza.name == "presence" then
-        module:log("info", "mod_firstowner: pre-message hook triggered for presence");
-    end
-end);
+-- Register test hooks for all possible MUC events
+for _, hook_name in ipairs(test_hooks) do
+    module:hook(hook_name, function(event)
+        module:log("info", "mod_firstowner: %s hook triggered", hook_name);
+        if event.room then
+            module:log("info", "  Room: %s", event.room.jid or "<unknown>");
+        end
+        if event.occupant then
+            module:log("info", "  Occupant: %s", event.occupant.bare_jid or "<unknown>");
+        end
+        if event.stanza then
+            module:log("info", "  Stanza: %s", event.stanza.name or "<unknown>");
+        end
+    end);
+end
 
 -- Hook to detect when rooms are created
 module:hook("muc-room-created", function(event)
     module:log("info", "mod_firstowner: muc-room-created hook triggered for room %s", event.room.jid or "<unknown>");
-    
-    -- Store a flag in the room to track if we've assigned an owner
     event.room._first_owner_assigned = false;
+end);
+
+-- Hook to detect when rooms are being created
+module:hook("muc-room-pre-create", function(event)
+    module:log("info", "mod_firstowner: muc-room-pre-create hook triggered for room %s", event.room and event.room.jid or "<unknown>");
+end);
+
+-- Hook to detect when rooms are being destroyed
+module:hook("muc-room-destroyed", function(event)
+    module:log("info", "mod_firstowner: muc-room-destroyed hook triggered for room %s", event.room and event.room.jid or "<unknown>");
 end);
 
 -- Hook to detect when users are about to join (earlier in the process)
