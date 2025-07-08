@@ -16,22 +16,38 @@ modules_enabled = {
 	-- Not essential, but recommended
 	"private"; -- Private XML storage (for room bookmarks, etc.)
 	"limits"; -- Enable bandwidth limiting for XMPP connections
+	"blocklist"; -- Allow users to block communications with other users
+	"bookmarks"; -- Synchronise the list of open rooms between clients
+	"carbons"; -- Keep multiple online clients in sync
+	"dialback"; -- Support for verifying remote servers using DNS
+	"smacks"; -- Stream management and resumption (XEP-0198)
+	"vcard4"; -- User profiles (stored in PEP)
+	"vcard_legacy"; -- Conversion between legacy vCard and PEP Avatar, vcard
+	"pep"; -- Allow users to store public and private data in their account
 	-- These are commented by default as they have a performance impact
 	-- "privacy"; -- Support privacy lists
 	-- "compression"; -- Stream compression (Debian: requires lua-zlib module to work)
 
 	-- Admin interfaces
-	"admin_adhoc"; -- Allows administration via an XMPP client that supports ad-hoc commands
+	-- "admin_adhoc"; -- Allows administration via an XMPP client that supports ad-hoc commands
 	"admin_shell";
 	-- "admin_telnet"; -- Opens telnet console interface on localhost port 5582
 
 	-- Nice to have
 	"version"; -- Replies to server version requests
 	"ping"; -- Replies to XMPP pings with pongs
+	"time"; -- Let others know the time here on this server
+	"uptime"; -- Report how long server has been running
+	"csi_simple"; -- Simple but effective traffic optimizations for mobile devices
+	"invites"; -- Create and manage invites
+	"invites_adhoc"; -- Allow admins/users to create invitations via their client
+	"invites_register"; -- Allows invited users to create accounts
 
 	-- HTTP modules
-	-- "bosh"; -- Enable BOSH clients, aka "Jabber over HTTP"
+	"bosh"; -- Enable BOSH clients, aka "Jabber over HTTP"
 	-- "http_files"; -- Serve static files from a directory over HTTP
+	"http_openmetrics"; -- for exposing metrics to stats collectors
+	"websocket"; -- XMPP over WebSockets
 
 	-- Other specific functionality
 	"posix"; -- POSIX functionality, sends server to background, enables syslog, etc.
@@ -82,7 +98,7 @@ pidfile = "/config/data/prosody.pid";
 
 -- Force clients to use encrypted connections? This option will
 -- prevent clients from authenticating unless they are using encryption.
-c2s_require_encryption = true;
+c2s_require_encryption = false;
 -- set c2s port
 c2s_ports = { 5222 } -- Listen on specific c2s port
 c2s_interfaces = { "*", "::" }
@@ -143,6 +159,9 @@ authentication = "internal_hashed"
 log = {
 	{ levels = { min = "info" }, timestamps = "%Y-%m-%d %X", to = "console" };
 }
+
+statistics = "internal"
+statistics_interval = "manual"
 
 certificates = "/config/certs"
 

@@ -1,7 +1,7 @@
 
 -- domain mapper options, must at least have domain base set to use the mapper
 muc_mapper_domain_base = "{{ .Env.XMPP_DOMAIN }}";
-muc_mapper_domain_prefix = "";
+-- muc_mapper_domain_prefix = "";
 recorder_prefixes = { "recorder@{{ .Env.XMPP_HIDDEN_DOMAIN }}" };
 
 http_default_host = "{{ .Env.XMPP_DOMAIN }}"
@@ -70,7 +70,7 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
 
         "cf_turncredentials"; -- Support CF TURN/STUN
     }
-    c2s_require_encryption = true
+    c2s_require_encryption = false
     main_muc = "{{ .Env.XMPP_MUC_DOMAIN }}"
     lobby_muc = "lobby.{{ .Env.XMPP_DOMAIN }}"
     breakout_rooms_muc = "breakout.{{ .Env.XMPP_DOMAIN }}"
@@ -80,7 +80,7 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
 
 VirtualHost "guest.{{ .Env.XMPP_DOMAIN }}"
     authentication = "anonymous"
-    c2s_require_encryption = true
+    c2s_require_encryption = false
 
 Component "{{ .Env.XMPP_MUC_DOMAIN }}" "muc"
     restrict_room_creation = true
@@ -103,8 +103,6 @@ Component "{{ .Env.XMPP_MUC_DOMAIN }}" "muc"
     muc_room_cache_size = 10000
     muc_room_locking = false
     muc_room_default_public_jids = true
-    muc_tombstones = false
-    muc_room_allow_persistent = false
 
 VirtualHost "{{ .Env.XMPP_AUTH_DOMAIN }}"
     modules_enabled = {
@@ -126,17 +124,12 @@ Component "{{ .Env.XMPP_INTERNAL_MUC_DOMAIN }}" "muc"
     storage = "memory"
     modules_enabled = {
         "muc_hide_all";
-        "muc_filter_access";
         "ping";
     }
     admins = { "focus@{{ .Env.XMPP_AUTH_DOMAIN }}", "jvb@{{ .Env.XMPP_AUTH_DOMAIN }}" }
-    restrict_room_creation = true
-    muc_filter_whitelist="{{ .Env.XMPP_AUTH_DOMAIN }}"
     muc_room_locking = false
     muc_room_default_public_jids = true
     muc_room_cache_size = 1000
-    muc_tombstones = false
-    muc_room_allow_persistent = false
 
 Component "lobby.{{ .Env.XMPP_DOMAIN }}" "muc"
     storage = "memory"
@@ -148,8 +141,6 @@ Component "lobby.{{ .Env.XMPP_DOMAIN }}" "muc"
     restrict_room_creation = true
     muc_room_locking = false
     muc_room_default_public_jids = true
-    muc_tombstones = false
-    muc_room_allow_persistent = false
     muc_room_cache_size = 10000
 
 Component "breakout.{{ .Env.XMPP_DOMAIN }}" "muc"
@@ -166,8 +157,6 @@ Component "breakout.{{ .Env.XMPP_DOMAIN }}" "muc"
     muc_room_locking = false
     muc_room_default_public_jids = true
     muc_room_cache_size = 10000
-    muc_tombstones = false
-    muc_room_allow_persistent = false
 
 -- Proxy to jicofo's user JID, so that it doesn't have to register as a component.
 Component "focus.{{ .Env.XMPP_DOMAIN }}" "client_proxy"
