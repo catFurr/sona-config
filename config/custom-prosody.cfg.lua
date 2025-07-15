@@ -1,24 +1,4 @@
 
--- domain mapper options, must at least have domain base set to use the mapper
-muc_mapper_domain_base = "{{ .Env.XMPP_DOMAIN }}";
--- muc_mapper_domain_prefix = "";
-recorder_prefixes = { "recorder@{{ .Env.XMPP_HIDDEN_DOMAIN }}" };
-
-http_default_host = "{{ .Env.XMPP_DOMAIN }}"
-consider_bosh_secure = true;
-consider_websocket_secure = true;
-cross_domain_websocket = true;
-cross_domain_bosh = false;
-
--- http_cors_override = {
---    bosh = {
---        enabled = false;
---    };
---    websocket = {
---        enabled = false;
---    };
--- }
-
 admins = {
     "focus@{{ .Env.XMPP_AUTH_DOMAIN }}",
     "jvb@{{ .Env.XMPP_AUTH_DOMAIN }}"
@@ -29,9 +9,32 @@ unlimited_jids = {
     "jvb@{{ .Env.XMPP_AUTH_DOMAIN }}"
 }
 
+plugin_paths = { "/prosody-plugins/", "/prosody-plugins-custom", "/prosody-plugins-contrib" }
+
+-- domain mapper options, must at least have domain base set to use the mapper
+muc_mapper_domain_base = "{{ .Env.XMPP_DOMAIN }}";
+muc_mapper_domain_prefix = "conference";
+
+recorder_prefixes = { "recorder@{{ .Env.XMPP_HIDDEN_DOMAIN }}" };
+
+http_default_host = "{{ .Env.XMPP_DOMAIN }}"
+
+-- http_cors_override = {
+--    bosh = {
+--        enabled = false;
+--    };
+--    websocket = {
+--        enabled = false;
+--    };
+-- }
+consider_bosh_secure = true;
+consider_websocket_secure = true;
+cross_domain_websocket = true;
+cross_domain_bosh = false;
+
 -- https://prosody.im/doc/modules/mod_smacks
 smacks_max_unacked_stanzas = 5;
-smacks_hibernation_time = 30;
+smacks_hibernation_time = 60;
 smacks_max_old_sessions = 1;
 
 -- Cloudflare TURN configuration
@@ -50,33 +53,31 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
     allow_empty_token = false
     enable_domain_verification = false
     -- app_secret="example_app_secret"
-    av_moderation_component = "avmoderation.{{ .Env.XMPP_DOMAIN }}"
-    speakerstats_component = "speakerstats.{{ .Env.XMPP_DOMAIN }}"
-    end_conference_component = "endconference.{{ .Env.XMPP_DOMAIN }}"
     modules_enabled = {
         "bosh";
         "websocket";
         "smacks";
-        "ping"; -- Enable mod_ping
         "speakerstats";
-        "external_services";
         "conference_duration";
+        "room_metadata";
         "end_conference";
         "muc_lobby_rooms";
         "muc_breakout_rooms";
         "av_moderation";
-        "room_metadata";
-        "features_identity";
 
         "cf_turncredentials"; -- Support CF TURN/STUN
     }
-    c2s_require_encryption = false
     main_muc = "{{ .Env.XMPP_MUC_DOMAIN }}"
+    room_metadata_component = "metadata.{{ .Env.XMPP_DOMAIN }}"
     lobby_muc = "lobby.{{ .Env.XMPP_DOMAIN }}"
     breakout_rooms_muc = "breakout.{{ .Env.XMPP_DOMAIN }}"
-    room_metadata_component = "metadata.{{ .Env.XMPP_DOMAIN }}"
+    speakerstats_component = "speakerstats.{{ .Env.XMPP_DOMAIN }}"
+    conference_duration_component = "conferenceduration.{{ .Env.XMPP_DOMAIN }}"
+    end_conference_component = "endconference.{{ .Env.XMPP_DOMAIN }}"
+    av_moderation_component = "avmoderation.{{ .Env.XMPP_DOMAIN }}"
+    c2s_require_encryption = true
     -- muc_lobby_whitelist = { "{{ .Env.XMPP_HIDDEN_DOMAIN }}" } -- Here we can whitelist jibri to enter lobby enabled rooms
-    smacks_max_hibernated_sessions = 1
+    -- smacks_max_hibernated_sessions = 1
 
 VirtualHost "guest.{{ .Env.XMPP_DOMAIN }}"
     authentication = "anonymous"
@@ -86,23 +87,25 @@ Component "{{ .Env.XMPP_MUC_DOMAIN }}" "muc"
     restrict_room_creation = true
     storage = "memory"
     modules_enabled = {
-        "muc_hide_all";
         "muc_meeting_id";
-        "muc_domain_mapper";
         "polls";
-        "token_verification";
-        "muc_rate_limit";
+        "muc_domain_mapper";
         "muc_password_whitelist";
-    }
-    admins = { "focus@{{ .Env.XMPP_AUTH_DOMAIN }}" }
-    muc_password_whitelist = {
-        "focus@{{ .Env.XMPP_AUTH_DOMAIN }}"
+        "token_verification";
+        "muc_hide_all";
+        "muc_rate_limit";
     }
     -- The size of the cache that saves state for IP addresses
     rate_limit_cache_size = 10000;
     muc_room_cache_size = 10000
     muc_room_locking = false
     muc_room_default_public_jids = true
+    -- admins = { "focus@{{ .Env.XMPP_AUTH_DOMAIN }}" }
+    muc_password_whitelist = {
+        "focus@{{ .Env.XMPP_AUTH_DOMAIN }}"
+    }
+    muc_tombstones = false
+    muc_room_allow_persistent = false
 
 VirtualHost "{{ .Env.XMPP_AUTH_DOMAIN }}"
     modules_enabled = {
@@ -124,12 +127,16 @@ Component "{{ .Env.XMPP_INTERNAL_MUC_DOMAIN }}" "muc"
     storage = "memory"
     modules_enabled = {
         "muc_hide_all";
-        "ping";
+        "muc_filter_access";
     }
-    admins = { "focus@{{ .Env.XMPP_AUTH_DOMAIN }}", "jvb@{{ .Env.XMPP_AUTH_DOMAIN }}" }
+    -- admins = { "focus@{{ .Env.XMPP_AUTH_DOMAIN }}", "jvb@{{ .Env.XMPP_AUTH_DOMAIN }}" }
+    restrict_room_creation = true
+    muc_filter_whitelist="{{ .Env.XMPP_AUTH_DOMAIN }}"
     muc_room_locking = false
     muc_room_default_public_jids = true
     muc_room_cache_size = 1000
+    muc_tombstones = false
+    muc_room_allow_persistent = false
 
 Component "lobby.{{ .Env.XMPP_DOMAIN }}" "muc"
     storage = "memory"
@@ -139,30 +146,37 @@ Component "lobby.{{ .Env.XMPP_DOMAIN }}" "muc"
         "polls";
     }
     restrict_room_creation = true
+    muc_tombstones = false
+    muc_room_allow_persistent = false
+    muc_room_cache_size = 10000
     muc_room_locking = false
     muc_room_default_public_jids = true
-    muc_room_cache_size = 10000
 
 Component "breakout.{{ .Env.XMPP_DOMAIN }}" "muc"
     storage = "memory"
     modules_enabled = {
-        "muc_hide_all";
         "muc_meeting_id";
+        "polls";
+        "muc_hide_all";
         "muc_domain_mapper";
         "muc_rate_limit";
-        "polls";
     }
-    admins = { "focus@{{ .Env.XMPP_AUTH_DOMAIN }}" }
+    -- admins = { "focus@{{ .Env.XMPP_AUTH_DOMAIN }}" }
     restrict_room_creation = true
+    muc_room_cache_size = 10000
     muc_room_locking = false
     muc_room_default_public_jids = true
-    muc_room_cache_size = 10000
+    muc_tombstones = false
+    muc_room_allow_persistent = false
 
 -- Proxy to jicofo's user JID, so that it doesn't have to register as a component.
 Component "focus.{{ .Env.XMPP_DOMAIN }}" "client_proxy"
     target_address = "focus@{{ .Env.XMPP_AUTH_DOMAIN }}"
 
 Component "speakerstats.{{ .Env.XMPP_DOMAIN }}" "speakerstats_component"
+    muc_component = "{{ .Env.XMPP_MUC_DOMAIN }}"
+
+Component "conferenceduration.{{ .Env.XMPP_DOMAIN }}" "conference_duration_component"
     muc_component = "{{ .Env.XMPP_MUC_DOMAIN }}"
 
 Component "endconference.{{ .Env.XMPP_DOMAIN }}" "end_conference"

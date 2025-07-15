@@ -20,6 +20,7 @@ services:
       - "10000:10000/udp"
     volumes:
       - ./custom-jvb.conf:/tmp/custom-conf.tpl:ro # Mount template file
+      - ./custom-logging.properties:/defaults/logging.properties:ro
       - ../entrypoint.sh:/tmp/entrypoint.sh:ro # Mount the entrypoint script
       - ../.env:/tmp/env-file:ro # Mount the env file
     entrypoint: ["sh", "/tmp/entrypoint.sh"]

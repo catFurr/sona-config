@@ -3,6 +3,8 @@
 -- Settings in this section apply to the whole server and are the default settings
 -- for any virtual hosts
 
+admins = {  }
+
 -- We need this for prosody 13.0
 component_admins_as_room_owners = true
 
@@ -98,7 +100,7 @@ pidfile = "/config/data/prosody.pid";
 
 -- Force clients to use encrypted connections? This option will
 -- prevent clients from authenticating unless they are using encryption.
-c2s_require_encryption = false;
+c2s_require_encryption = true;
 -- set c2s port
 c2s_ports = { 5222 } -- Listen on specific c2s port
 c2s_interfaces = { "*", "::" }
@@ -176,7 +178,5 @@ unbound = {
 }
 
 data_path = "/config/data"
-
-plugin_paths = { "/prosody-plugins/", "/prosody-plugins-custom", "/prosody-plugins-contrib" }
 
 Include "conf.d/*.cfg.lua"
