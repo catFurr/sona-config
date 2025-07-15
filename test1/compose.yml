@@ -1,0 +1,180 @@
+# Working sample setup
+
+services:
+  # XMPP server
+  prosody:
+    image: jitsi/prosody:stable
+    container_name: prosody
+    restart: unless-stopped
+    # ports:
+    #   # XMPP client port for jvb and jicofo
+    #   - "5222:5222"
+    expose:
+      - "5222"
+      - "5269"
+      - "5347"
+      - "5280"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5280/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+      volumes:
+        # Override the default plugins with our own
+        - ../prosody-plugins/token/util.lib.lua:/prosody-plugins/token/util.lib.lua
+        - ../prosody-plugins/luajwtjitsi.lib.lua:/prosody-plugins/luajwtjitsi.lib.lua
+        - ~/sona-config/prosody-plugins/custom:/prosody-plugins-custom:Z
+        # - ../prosody-plugins/custom:/prosody-plugins-custom
+        # Persistent storage for prosody data
+        - prosody-data:/config/data
+        # Certificates
+        - ../config/certs:/config/certs
+        - ./custom-prosody-base.cfg.lua:/defaults/prosody.cfg.lua:ro
+        - ./custom-prosody.cfg.lua:/tmp/custom-conf.tpl:ro
+        - ../entrypoint.sh:/tmp/entrypoint.sh:ro
+        - ../.env:/tmp/env-file:ro
+    entrypoint: ["sh", "/tmp/entrypoint.sh"]
+
+    environment:
+        # Override default config because we can't guarantee the order of Include statements
+        - CONFIG_OUTPUT_PATH=/defaults/conf.d/jitsi-meet.cfg.lua
+
+        - PROSODY_MODE="client"
+        - JICOFO_AUTH_PASSWORD=${JICOFO_AUTH_PASSWORD}
+        - JVB_AUTH_PASSWORD=${JVB_AUTH_PASSWORD}
+        # Domain configuration (needed for registering the components and traefik labels)
+        - XMPP_AUTH_DOMAIN=${XMPP_AUTH_DOMAIN}
+        - XMPP_DOMAIN=${XMPP_DOMAIN}
+        - JVB_AUTH_USER=${JVB_AUTH_USER}
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy-network"
+      # Service definition
+      - "traefik.http.services.prosody.loadbalancer.server.port=5280"
+      # Router for BOSH
+      - "traefik.http.routers.prosody-bosh.rule=Host(`staj.sonacove.com`) && PathPrefix(`/http-bind`)"
+      - "traefik.http.routers.prosody-bosh.entrypoints=websecure"
+      - "traefik.http.routers.prosody-bosh.tls=true"
+      - "traefik.http.routers.prosody-bosh.tls.certresolver=myresolver"
+      - "traefik.http.routers.prosody-bosh.service=prosody"
+      # Router for Websocket
+      - "traefik.http.routers.prosody-ws.rule=Host(`staj.sonacove.com`) && PathPrefix(`/xmpp-websocket`)"
+      - "traefik.http.routers.prosody-ws.entrypoints=websecure"
+      - "traefik.http.routers.prosody-ws.tls=true"
+      - "traefik.http.routers.prosody-ws.tls.certresolver=myresolver"
+      - "traefik.http.routers.prosody-ws.service=prosody"
+    networks:
+      meet.jitsi:
+        aliases:
+          - xmpp.meet.jitsi
+      proxy-network: {}
+
+  # Focus component
+  jicofo:
+    image: jitsi/jicofo:stable
+    container_name: jicofo
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8888:8888"
+    expose:
+      # REST including metrics, conference-request, etc.
+      - "8888"
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -f http://localhost:8888/about/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    volumes:
+      - ./custom-jicofo.conf:/tmp/custom-conf.tpl:ro
+      # - ./custom-logging.properties:/defaults/logging.properties:ro
+      - ../entrypoint.sh:/tmp/entrypoint.sh:ro
+      - ../.env:/tmp/env-file:ro
+    entrypoint: ["sh", "/tmp/entrypoint.sh"]
+    environment:
+      - CONFIG_OUTPUT_PATH=/config/custom-jicofo.conf
+
+      - JICOFO_AUTH_PASSWORD="defaultpassword"
+      - XMPP_HIDDEN_DOMAIN=""
+      - XMPP_DOMAIN=${XMPP_DOMAIN} # For traefik labels
+    depends_on:
+      prosody:
+        condition: service_healthy
+    networks:
+      - meet.jitsi
+      - proxy-network
+    labels:
+      # - service: "jitsi-jicofo"
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy-network"
+
+      # Router for Jicofo Conference Request API
+      - "traefik.http.routers.jicofo-conf-req.rule=Host(`${XMPP_DOMAIN}`) && PathPrefix(`/conference-request/v1`)"
+      - "traefik.http.routers.jicofo-conf-req.entrypoints=websecure"
+      - "traefik.http.routers.jicofo-conf-req.tls.certresolver=myresolver"
+      - "traefik.http.routers.jicofo-conf-req.middlewares=jicofo-specific-headers@file"
+      - "traefik.http.routers.jicofo-conf-req.service=jicofo-conf-req-svc"
+      - "traefik.http.services.jicofo-conf-req-svc.loadbalancer.server.port=8888"
+
+  # Video bridge
+  jvb:
+    image: jitsi/jvb:stable
+    container_name: jvb
+    restart: unless-stopped
+    expose:
+      # public API port for colibri websocket
+      - "9090"
+      # private API for control and metrics
+      - "8080"
+    ports:
+      # ICE/UDP port for media
+      - "10000:10000/udp"
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -f http://localhost:8080/debug?full=true || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    volumes:
+      - ./custom-jvb.conf:/tmp/custom-conf.tpl:ro # Mount template file
+      # - ././videobridge/custom-logging.properties:/defaults/logging.properties:ro
+      - ../entrypoint.sh:/tmp/entrypoint.sh:ro # Mount the entrypoint script
+      - ../.env:/tmp/env-file:ro # Mount the env file
+    entrypoint: ["sh", "/tmp/entrypoint.sh"]
+    environment:
+      - CONFIG_OUTPUT_PATH=/config/custom-jvb.conf
+
+      - JVB_AUTH_PASSWORD="defaultpassword"
+      - XMPP_SERVER="meet.example.com"
+      - XMPP_DOMAIN=${XMPP_DOMAIN} # Used for traefik labels
+      - JVB_WS_SERVER_ID_FALLBACK="false"
+      - JVB_ADVERTISE_IPS="false"
+      - LOCAL_ADDRESS="0.0.0.0"
+      - JVB_INSTANCE_ID=${JVB_INSTANCE_ID:-jvb-001}
+    depends_on:
+      - prosody
+    networks:
+      - meet.jitsi
+      - proxy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy-network"
+      - "traefik.http.routers.jitsi-jvb-ws.rule=Host(`staj.sonacove.com`) && PathPrefix(`/colibri-websocket`)"
+      - "traefik.http.routers.jitsi-jvb-ws.entrypoints=websecure"
+      - "traefik.http.routers.jitsi-jvb-ws.tls=true"
+      - "traefik.http.routers.jitsi-jvb-ws.tls.certresolver=myresolver"
+      - "traefik.http.services.jitsi-jvb-ws.loadbalancer.server.port=8080"
+
+volumes:
+  prosody-data:
+
+# Custom network so all services can communicate using a FQDN
+networks:
+  meet.jitsi:
+  proxy-network:
+    external: true
+    name: proxy-network
