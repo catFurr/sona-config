@@ -31,8 +31,8 @@ modules_enabled = {
 	-- "compression"; -- Stream compression (Debian: requires lua-zlib module to work)
 
 	-- Admin interfaces
-	-- "admin_adhoc"; -- Allows administration via an XMPP client that supports ad-hoc commands
 	"admin_shell";
+	-- "admin_adhoc"; -- Allows administration via an XMPP client that supports ad-hoc commands
 	-- "admin_telnet"; -- Opens telnet console interface on localhost port 5582
 
 	-- Nice to have

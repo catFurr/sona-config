@@ -5,6 +5,11 @@ services:
   traefik:
     image: traefik:v3.4
     container_name: traefik
+    restart: unless-stopped
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "traefik_acme_storage:/data"
+      - "./traefik_dynamic.yml:/etc/traefik/dynamic/traefik_dynamic.yml:ro"
     command:
       - "--log.level=INFO"
       - "--accesslog=true"
@@ -20,38 +25,33 @@ services:
       - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/data/acme.json"
       - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "traefik_acme_storage:/data"
-      - "./traefik_dynamic.yml:/etc/traefik/dynamic/traefik_dynamic.yml:ro"
-    networks:
-      - proxy-network
-    restart: unless-stopped
     security_opt:
       - no-new-privileges:true
     labels:
       - "traefik.enable=true"
-
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
-    container_name: otel-collector
-    restart: unless-stopped
-    command: ["--config=/etc/otelcol-contrib/config.yaml"]
-    # Run as root to access Docker socket and container logs
-    user: "0:0"
-    volumes:
-      - ./otel-config.yml:/etc/otelcol-contrib/config.yaml:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    ports:
+      - "80:80"
+      - "443:443"
     networks:
       - proxy-network
-    environment:
-      - HOSTNAME=${SERVER_NAME}
-      - GRAFANA_USERNAME=${GRAFANA_USERNAME}
-      - GRAFANA_API_KEY=${GRAFANA_API_KEY}
+
+  # otel-collector:
+  #   image: otel/opentelemetry-collector-contrib:latest
+  #   container_name: otel-collector
+  #   restart: unless-stopped
+  #   command: ["--config=/etc/otelcol-contrib/config.yaml"]
+  #   # Run as root to access Docker socket and container logs
+  #   user: "0:0"
+  #   volumes:
+  #     - ./otel-config.yml:/etc/otelcol-contrib/config.yaml:ro
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #     - /var/lib/docker/containers:/var/lib/docker/containers:ro
+  #   networks:
+  #     - proxy-network
+  #   environment:
+  #     - HOSTNAME=${SERVER_NAME}
+  #     - GRAFANA_USERNAME=${GRAFANA_USERNAME}
+  #     - GRAFANA_API_KEY=${GRAFANA_API_KEY}
 
 networks:
   proxy-network:
