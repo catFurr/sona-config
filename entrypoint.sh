@@ -23,6 +23,9 @@ set -e
         echo "Warning: No .env file found at /tmp/env-file"
     fi
 
+    # Local IP for the ice4j mapping harvester.
+    export _LOCAL_ADDRESS=$(ip route get 1 | grep -oP '(?<=src ).*' | awk '{ print $1 '})
+
     # Process the custom config template if it exists
     if [ -f /tmp/custom-conf.tpl ]; then
         # echo "Processing custom config template..."
