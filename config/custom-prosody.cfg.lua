@@ -83,6 +83,30 @@ VirtualHost "guest.{{ .Env.XMPP_DOMAIN }}"
     authentication = "anonymous"
     c2s_require_encryption = false
 
+VirtualHost "auth.{{ .Env.XMPP_DOMAIN }}"
+    modules_enabled = {
+        "limits_exception";
+        "smacks";
+    }
+    authentication = "internal_hashed"
+    smacks_hibernation_time = 15;
+
+-- internal muc component
+Component "internal-muc.{{ .Env.XMPP_DOMAIN }}" "muc"
+    storage = "memory"
+    modules_enabled = {
+        "muc_hide_all";
+        "muc_filter_access";
+    }
+    -- admins = { "focus@auth.{{ .Env.XMPP_DOMAIN }}", "jvb@auth.{{ .Env.XMPP_DOMAIN }}" }
+    restrict_room_creation = true
+    muc_filter_whitelist="auth.{{ .Env.XMPP_DOMAIN }}"
+    muc_room_locking = false
+    muc_room_default_public_jids = true
+    muc_room_cache_size = 1000
+    muc_tombstones = false
+    muc_room_allow_persistent = false
+
 Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
     restrict_room_creation = true
     storage = "memory"
@@ -107,36 +131,12 @@ Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
     muc_tombstones = false
     muc_room_allow_persistent = false
 
-VirtualHost "auth.{{ .Env.XMPP_DOMAIN }}"
-    modules_enabled = {
-        "limits_exception";
-        "smacks";
-    }
-    authentication = "internal_hashed"
-    smacks_hibernation_time = 15;
-
 VirtualHost "recorder.{{ .Env.XMPP_DOMAIN }}"
     modules_enabled = {
       "smacks";
     }
     authentication = "internal_hashed"
     smacks_max_old_sessions = 2000;
-
--- internal muc component
-Component "internal.auth.{{ .Env.XMPP_DOMAIN }}" "muc"
-    storage = "memory"
-    modules_enabled = {
-        "muc_hide_all";
-        "muc_filter_access";
-    }
-    -- admins = { "focus@auth.{{ .Env.XMPP_DOMAIN }}", "jvb@auth.{{ .Env.XMPP_DOMAIN }}" }
-    restrict_room_creation = true
-    muc_filter_whitelist="auth.{{ .Env.XMPP_DOMAIN }}"
-    muc_room_locking = false
-    muc_room_default_public_jids = true
-    muc_room_cache_size = 1000
-    muc_tombstones = false
-    muc_room_allow_persistent = false
 
 Component "lobby.{{ .Env.XMPP_DOMAIN }}" "muc"
     storage = "memory"
@@ -190,8 +190,8 @@ Component "metadata.{{ .Env.XMPP_DOMAIN }}" "room_metadata_component"
     breakout_rooms_component = "breakout.{{ .Env.XMPP_DOMAIN }}"
 
 -- Disable components defined by the default container image
-Component "internal-muc.meet.jitsi" "muc"
-    enabled = false
+-- Component "internal-muc.meet.jitsi" "muc"
+--     enabled = false
 
-Component "muc.meet.jitsi" "muc"
-    enabled = false
+-- Component "muc.meet.jitsi" "muc"
+--     enabled = false

@@ -1,4 +1,7 @@
+
 services:
+
+  # XMPP Server
   prosody:
     image: jitsi/prosody:stable
     container_name: prosody
@@ -8,7 +11,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 10s
     volumes:
       # Override the default plugins with our own
       - ../prosody-plugins/token/util.lib.lua:/prosody-plugins/token/util.lib.lua
@@ -63,6 +66,7 @@ services:
       # XMPP TCP client port
       - "5222:5222"
     expose:
+      - "5222"
       # - "5269"  # S2S
       - "5347"  # Component protocol
       # XMPP client port proxied by traefik (BOSH, Websockets)
@@ -70,6 +74,7 @@ services:
     networks:
       - proxy-network
 
+  # Focus component
   jicofo:
     image: jitsi/jicofo:stable
     container_name: jicofo
@@ -80,11 +85,10 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 10s
     depends_on:
-      - prosody
-      # Start along with prosody, so its ready when prosody entrypoint script
-      # runs the mod_roster_command subscribe focus... command
+      prosody:
+        condition: service_healthy
     volumes:
       - ./custom-jicofo.conf:/tmp/custom-conf.tpl:ro
       - ./custom-logging.properties:/defaults/logging.properties:ro
@@ -95,8 +99,6 @@ services:
       - CONFIG_OUTPUT_PATH=/config/custom-jicofo.conf
 
       - JICOFO_AUTH_PASSWORD="defaultpassword"
-      - XMPP_HIDDEN_DOMAIN=""
-      - XMPP_DOMAIN=${XMPP_DOMAIN} # For traefik labels
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy-network"
@@ -120,3 +122,4 @@ volumes:
 networks:
   proxy-network:
     external: true
+    name: proxy-network
