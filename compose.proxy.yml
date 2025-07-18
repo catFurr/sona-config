@@ -54,23 +54,26 @@ services:
     networks:
       - proxy-network
 
-  # otel-collector:
-  #   image: otel/opentelemetry-collector-contrib:latest
-  #   container_name: otel-collector
-  #   restart: unless-stopped
-  #   command: ["--config=/etc/otelcol-contrib/config.yaml"]
-  #   # Run as root to access Docker socket and container logs
-  #   user: "0:0"
-  #   volumes:
-  #     - ./otel-config.yml:/etc/otelcol-contrib/config.yaml:ro
-  #     - /var/run/docker.sock:/var/run/docker.sock:ro
-  #     - /var/lib/docker/containers:/var/lib/docker/containers:ro
-  #   networks:
-  #     - proxy-network
-  #   environment:
-  #     - HOSTNAME=${SERVER_NAME}
-  #     - GRAFANA_USERNAME=${GRAFANA_USERNAME}
-  #     - GRAFANA_API_KEY=${GRAFANA_API_KEY}
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    # Run as root to access Docker socket and container logs
+    user: "0:0"
+    volumes:
+      - ./otel-config.yml:/etc/otelcol-contrib/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    networks:
+      - proxy-network
+    environment:
+      - HOSTNAME=${SERVER_NAME}
+      - SERVER_NAME=${SERVER_NAME}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - REGION=${SERVER_REGION:-paris-1}
+      - GRAFANA_USERNAME=${GRAFANA_USERNAME}
+      - GRAFANA_API_KEY=${GRAFANA_API_KEY}
 
 networks:
   proxy-network:

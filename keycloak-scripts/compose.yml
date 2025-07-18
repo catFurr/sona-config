@@ -66,10 +66,10 @@ services:
       - "traefik.http.routers.keycloak-secure.tls.certresolver=myresolver"
       - "traefik.http.routers.keycloak-secure.service=keycloak-svc"
       # Apply Keycloak's specific CSP and the existing redirect. Common security & compression are global.
-      - "traefik.http.routers.keycloak-secure.middlewares=keycloak-csp-header@docker,redirect-auth@docker"
+      - "traefik.http.routers.keycloak-secure.middlewares=keycloak-csp-headers@docker,redirect-auth@docker"
 
       # Keycloak-specific Content Security Policy middleware
-      - "traefik.http.middlewares.keycloak-csp-header.headers.customResponseHeaders.Content-Security-Policy=default-src 'self' https:; frame-src 'self' https:; connect-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' https: data:; font-src 'self' https: data:;"
+      - "traefik.http.middlewares.keycloak-csp-headers.headers.customResponseHeaders.Content-Security-Policy=default-src 'self' https:; frame-src 'self' https:; connect-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' https: data:; font-src 'self' https: data:;"
 
       # Redirect trailing slash (existing middleware defined via labels)
       - "traefik.http.middlewares.redirect-auth.redirectregex.regex=^https://(.*)/auth$$"

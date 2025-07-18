@@ -24,12 +24,23 @@ receivers:
           scrape_interval: 180s
           static_configs:
             - targets: ["keycloak:9000"]
-          metrics_path: "/metrics"
+          metrics_path: "/auth/metrics"
+
+  # System-level metrics (Ubuntu host metrics)
+  hostmetrics:
+    collection_interval: 120s
+    scrapers:
+      cpu: {}
+      memory: {}
+      disk: {}
+      network: {}
+      load: {}
+      filesystem: {}
 
   # Docker container stats for automatic container metadata
   docker_stats:
     endpoint: unix:///var/run/docker.sock
-    collection_interval: 60s
+    collection_interval: 120s
     timeout: 5s
     api_version: "1.44"
 
@@ -53,14 +64,20 @@ receivers:
       - type: move
         from: attributes.log
         to: body
-      # Parse timestamp and store it properly
+      # Parse timestamp from Docker log and use it as the main timestamp
       - type: time_parser
         parse_from: attributes.time
         layout: "%Y-%m-%dT%H:%M:%S.%fZ"
+      # Remove the separate 'time' attribute since we're using it as the main timestamp
+      - type: remove
+        field: attributes.time
       # Store stream info as attribute
       - type: add
         field: attributes.stream
         value: EXPR(attributes.stream)
+      # Remove the obscure log file path, we'll add a cleaner one later
+      - type: remove
+        field: attributes["log.file.path"]
 
 processors:
   batch: {}
@@ -69,27 +86,18 @@ processors:
     detectors: ["env", "system", "docker"]
     override: false
     timeout: 30s
-    docker:
-      resource_attributes:
-        container.name:
-          enabled: true
-        container.id:
-          enabled: true
-        container.image.name:
-          enabled: true
-        container.image.tag:
-          enabled: true
 
-  # Resource processor to set service names automatically
+  # Resource processor to set server configuration
   resource:
     attributes:
-      # Set main service name to hostname (server name)
-      - key: service.name
-        value: "${env:HOSTNAME}"
+      - key: host.name
+        value: "${env:SERVER_NAME:-unknown}"
         action: upsert
-      # Set deployment environment
       - key: deployment.environment
-        value: "production"
+        value: "${env:ENVIRONMENT:-production}"
+        action: upsert
+      - key: deployment.region
+        value: "${env:REGION:-paris-1}"
         action: upsert
 
   # Transform processor for metrics - minimal cleanup
@@ -107,61 +115,52 @@ processors:
           - delete_key(resource.attributes, "process.runtime.name")
           - delete_key(resource.attributes, "process.runtime.version")
 
-  # Transform processor for logs - clean message extraction
+  # Transform processor for logs - set proper service names and clean up attributes
   transform/process_logs:
     error_mode: ignore
     log_statements:
       - context: resource
         statements:
-          # Keep service name as hostname, add container name as separate attribute
-          - set(resource.attributes["service.name"], "${env:HOSTNAME}")
-          - set(resource.attributes["deployment.environment"], "production")
-          # Keep essential resource attributes
+          # Set service name based on container name (more useful than hostname)
+          - set(resource.attributes["service.name"], resource.attributes["container.name"]) where resource.attributes["container.name"] != nil
+          # Fallback to a meaningful service name if container name is not available
+          - set(resource.attributes["service.name"], "docker-container") where resource.attributes["service.name"] == nil or resource.attributes["service.name"] == "unknown_service"
+          # Set host name to server name from environment
+          - set(resource.attributes["host.name"], "${env:SERVER_NAME}") where resource.attributes["host.name"] == nil
+          # Set deployment environment and region
+          - set(resource.attributes["deployment.environment"], "${env:ENVIRONMENT:-production}")
+          - set(resource.attributes["deployment.region"], "${env:REGION:-us-east-1}")
+          # Create a human-readable container identifier
+          - set(resource.attributes["container.short_id"], Substring(resource.attributes["container.id"], 0, 12)) where resource.attributes["container.id"] != nil
+          # Keep essential resource attributes and remove clutter
           - keep_keys(resource.attributes, [
             "deployment.environment",
+            "deployment.region", 
             "service.name",
             "host.name",
             "container.name",
-            "container.id",
+            "container.short_id",
             "container.image.name"
             ])
       - context: log
         statements:
-          # Try to parse structured JSON logs to extract clean message
-          - parse_json(body) where IsMatch(body, "^\\s*\\{.*\\}\\s*$")
-
-          # Extract log level from various possible fields
-          - set(severity_text, attributes["level"]) where attributes["level"] != nil
-          - set(severity_text, attributes["severity"]) where attributes["severity"] != nil
-          - set(severity_text, attributes["levelname"]) where attributes["levelname"] != nil
-          - set(severity_text, attributes["lvl"]) where attributes["lvl"] != nil
-
-          # Extract clean message from JSON logs, fallback to original body
-          - set(body, attributes["message"]) where attributes["message"] != nil
-          - set(body, attributes["msg"]) where attributes["msg"] != nil
-          - set(body, attributes["text"]) where attributes["text"] != nil
-
-          # For structured logs with timestamp, level, file, and message - extract just the message
-          # Example: "2025-06-14T18:27:41.717Z	warn	internal/transaction.go:150	Failed to scrape Prometheus endpoint"
-          - parse_regex(body, "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+Z\\s+(?P<level>\\w+)\\s+(?P<file>[^\\s]+)\\s+(?P<message>.+)$") where IsMatch(body, "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+Z\\s+\\w+\\s+")
-          - set(severity_text, attributes["level"]) where attributes["level"] != nil
-          - set(body, attributes["message"]) where attributes["message"] != nil
-          - set(attributes["source_file"], attributes["file"]) where attributes["file"] != nil
-          - delete_key(attributes, "level")
-          - delete_key(attributes, "file")
-          - delete_key(attributes, "message")
+          # Set severity number based on common log levels found in body
+          - set(severity_text, "DEBUG") where IsMatch(body, "(?i)debug")
+          - set(severity_text, "INFO") where IsMatch(body, "(?i)info")
+          - set(severity_text, "WARN") where IsMatch(body, "(?i)warn")
+          - set(severity_text, "ERROR") where IsMatch(body, "(?i)error")
+          - set(severity_text, "FATAL") where IsMatch(body, "(?i)fatal")
 
           # Set severity number based on text level
-          - set(severity_number, 5) where severity_text == "DEBUG" or severity_text == "debug" or severity_text == "TRACE" or severity_text == "trace"
-          - set(severity_number, 9) where severity_text == "INFO" or severity_text == "info"
-          - set(severity_number, 13) where severity_text == "WARN" or severity_text == "warn" or severity_text == "WARNING" or severity_text == "warning"
-          - set(severity_number, 17) where severity_text == "ERROR" or severity_text == "error"
-          - set(severity_number, 21) where severity_text == "FATAL" or severity_text == "fatal" or severity_text == "CRITICAL" or severity_text == "critical"
-
-          # Clean up any remaining JSON metadata from the message
-          - parse_regex(body, "^(?P<clean_message>.+?)\\s*\\{.*\\}\\s*$") where IsMatch(body, ".+\\{.*\\}\\s*$")
-          - set(body, attributes["clean_message"]) where attributes["clean_message"] != nil
-          - delete_key(attributes, "clean_message")
+          - set(severity_number, 5) where severity_text == "DEBUG"
+          - set(severity_number, 9) where severity_text == "INFO"
+          - set(severity_number, 13) where severity_text == "WARN"
+          - set(severity_number, 17) where severity_text == "ERROR"
+          - set(severity_number, 21) where severity_text == "FATAL"
+          
+          # Remove redundant attributes that are now handled better
+          - delete_key(attributes, "log.file.name")
+          - delete_key(attributes, "log.file.path")
 
 exporters:
   otlphttp/grafana_cloud:
@@ -182,7 +181,7 @@ service:
       level: none
   pipelines:
     metrics:
-      receivers: [prometheus, docker_stats]
+      receivers: [prometheus, docker_stats, hostmetrics]
       processors:
         - resourcedetection
         - resource

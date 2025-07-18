@@ -48,7 +48,7 @@ modules_enabled = {
 	-- HTTP modules
 	"bosh"; -- Enable BOSH clients, aka "Jabber over HTTP"
 	-- "http_files"; -- Serve static files from a directory over HTTP
-	"http_openmetrics"; -- for exposing metrics to stats collectors
+	"http_openmetrics"; -- Export OpenMetrics-compatible monitoring data
 	"websocket"; -- XMPP over WebSockets
 
 	-- Other specific functionality
@@ -163,7 +163,10 @@ log = {
 }
 
 statistics = "internal"
-statistics_interval = "manual"
+statistics_interval = "manual"  -- Single scraper, use manual for optimal performance
+
+-- OpenMetrics access control - allow access from Docker network
+openmetrics_allow_cidr = "172.18.0.0/16"  -- Allow Docker proxy network
 
 certificates = "/config/certs"
 
