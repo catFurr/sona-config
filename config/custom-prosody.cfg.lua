@@ -1,5 +1,9 @@
+-- working jitsi-meet.cfg.lua
 
 admins = {
+    -- "jigasi@auth.{{ .Env.XMPP_DOMAIN }}",
+    -- "jibri@auth.{{ .Env.XMPP_DOMAIN }}",
+
     "focus@auth.{{ .Env.XMPP_DOMAIN }}",
     "jvb@auth.{{ .Env.XMPP_DOMAIN }}"
 }
@@ -11,7 +15,6 @@ unlimited_jids = {
 
 plugin_paths = { "/prosody-plugins/", "/prosody-plugins-custom", "/prosody-plugins-contrib" }
 
--- domain mapper options, must at least have domain base set to use the mapper
 muc_mapper_domain_base = "{{ .Env.XMPP_DOMAIN }}";
 muc_mapper_domain_prefix = "conference";
 
@@ -55,11 +58,14 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
     -- app_secret="example_app_secret"
     modules_enabled = {
         "bosh";
+
         "websocket";
-        "smacks";
+        "smacks"; -- XEP-0198: Stream Management
+
         "speakerstats";
         "conference_duration";
         "room_metadata";
+
         "end_conference";
         "muc_lobby_rooms";
         "muc_breakout_rooms";
@@ -67,6 +73,7 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
 
         "cf_turncredentials"; -- Support CF TURN/STUN
     }
+
     main_muc = "conference.{{ .Env.XMPP_DOMAIN }}"
     room_metadata_component = "metadata.{{ .Env.XMPP_DOMAIN }}"
     lobby_muc = "lobby.{{ .Env.XMPP_DOMAIN }}"
@@ -76,6 +83,7 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
     end_conference_component = "endconference.{{ .Env.XMPP_DOMAIN }}"
     av_moderation_component = "avmoderation.{{ .Env.XMPP_DOMAIN }}"
     c2s_require_encryption = true
+
     -- muc_lobby_whitelist = { "recorder.{{ .Env.XMPP_DOMAIN }}" } -- Here we can whitelist jibri to enter lobby enabled rooms
     -- smacks_max_hibernated_sessions = 1
 
@@ -98,7 +106,6 @@ Component "internal-muc.{{ .Env.XMPP_DOMAIN }}" "muc"
         "muc_hide_all";
         "muc_filter_access";
     }
-    -- admins = { "focus@auth.{{ .Env.XMPP_DOMAIN }}", "jvb@auth.{{ .Env.XMPP_DOMAIN }}" }
     restrict_room_creation = true
     muc_filter_whitelist="auth.{{ .Env.XMPP_DOMAIN }}"
     muc_room_locking = false
@@ -115,6 +122,7 @@ Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
         "polls";
         "muc_domain_mapper";
         "muc_password_whitelist";
+
         "token_verification";
         "muc_hide_all";
         "muc_rate_limit";
@@ -124,9 +132,8 @@ Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
     muc_room_cache_size = 10000
     muc_room_locking = false
     muc_room_default_public_jids = true
-    -- admins = { "focus@auth.{{ .Env.XMPP_DOMAIN }}" }
     muc_password_whitelist = {
-        "focus@auth.{{ .Env.XMPP_DOMAIN }}"
+        "focus@auth.{{ .Env.XMPP_DOMAIN }}";
     }
     muc_tombstones = false
     muc_room_allow_persistent = false
@@ -140,28 +147,28 @@ VirtualHost "recorder.{{ .Env.XMPP_DOMAIN }}"
 
 Component "lobby.{{ .Env.XMPP_DOMAIN }}" "muc"
     storage = "memory"
-    modules_enabled = {
-        "muc_hide_all";
-        "muc_rate_limit";
-        "polls";
-    }
     restrict_room_creation = true
     muc_tombstones = false
     muc_room_allow_persistent = false
     muc_room_cache_size = 10000
     muc_room_locking = false
     muc_room_default_public_jids = true
+    modules_enabled = {
+        "muc_hide_all";
+        "muc_rate_limit";
+        "polls";
+    }
 
 Component "breakout.{{ .Env.XMPP_DOMAIN }}" "muc"
     storage = "memory"
     modules_enabled = {
         "muc_meeting_id";
         "polls";
+
         "muc_hide_all";
         "muc_domain_mapper";
         "muc_rate_limit";
     }
-    -- admins = { "focus@auth.{{ .Env.XMPP_DOMAIN }}" }
     restrict_room_creation = true
     muc_room_cache_size = 10000
     muc_room_locking = false
@@ -188,10 +195,3 @@ Component "avmoderation.{{ .Env.XMPP_DOMAIN }}" "av_moderation_component"
 Component "metadata.{{ .Env.XMPP_DOMAIN }}" "room_metadata_component"
     muc_component = "conference.{{ .Env.XMPP_DOMAIN }}"
     breakout_rooms_component = "breakout.{{ .Env.XMPP_DOMAIN }}"
-
--- Disable components defined by the default container image
--- Component "internal-muc.meet.jitsi" "muc"
---     enabled = false
-
--- Component "muc.meet.jitsi" "muc"
---     enabled = false

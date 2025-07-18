@@ -82,10 +82,10 @@ limits = {
 		rate = "10kb/s";
 	};
 
-    -- Limit incoming server connections
-    s2sin = {
-        rate = "30kb/s";
-    };
+	-- Limit incoming server connections
+	s2sin = {
+		rate = "30kb/s";
+	};
 }
 
 --Prosody garbage collector settings
@@ -159,7 +159,7 @@ authentication = "internal_hashed"
 --  Logs info and higher to /var/log
 --  Logs errors to syslog also
 log = {
-	{ levels = { min = "info" }, timestamps = "%Y-%m-%d %X", to = "console" };
+	{ levels = {min = "info" }, timestamps = "%Y-%m-%d %X", to = "console" };
 }
 
 statistics = "internal"

@@ -17,26 +17,22 @@ services:
       - ../prosody-plugins/token/util.lib.lua:/prosody-plugins/token/util.lib.lua
       - ../prosody-plugins/luajwtjitsi.lib.lua:/prosody-plugins/luajwtjitsi.lib.lua
       - ../prosody-plugins/custom:/prosody-plugins-custom
-      # Persistent storage for prosody data
       - prosody-data:/config/data
-      # Certificates
       - ./certs:/config/certs
       - ./custom-prosodyBase.cfg.lua:/defaults/prosody.cfg.lua:ro
-      - ./custom-prosody.cfg.lua:/tmp/custom-conf.tpl:ro
-      - ../entrypoint.sh:/tmp/entrypoint.sh:ro
-      - ../.env:/tmp/env-file:ro
-    entrypoint: ["sh", "/tmp/entrypoint.sh"]
+      - ./custom-prosody.cfg.lua:/defaults/conf.d/jitsi-meet.cfg.lua:ro
     environment:
-      # Override default config because we can't guarantee the order of Include statements
-      - CONFIG_OUTPUT_PATH=/defaults/conf.d/jitsi-meet.cfg.lua
+        - PROSODY_MODE=client
+        - JICOFO_AUTH_PASSWORD=${JICOFO_AUTH_PASSWORD}
+        - JVB_AUTH_PASSWORD=${JVB_AUTH_PASSWORD}
+        - JVB_AUTH_USER=jvb
+        - XMPP_DOMAIN=${XMPP_DOMAIN}
+        - XMPP_AUTH_DOMAIN=auth.${XMPP_DOMAIN}
+        - XMPP_RECORDER_DOMAIN=recorder.${XMPP_DOMAIN}
 
-      - PROSODY_MODE="client"
-      - JICOFO_AUTH_PASSWORD=${JICOFO_AUTH_PASSWORD}
-      - JVB_AUTH_PASSWORD=${JVB_AUTH_PASSWORD}
-      # Domain configuration (needed for registering the components and traefik labels)
-      - XMPP_DOMAIN=${XMPP_DOMAIN}
-      - XMPP_AUTH_DOMAIN=auth.${XMPP_DOMAIN}
-      - JVB_AUTH_USER=jvb
+        - KC_HOST_URL=${KC_HOST_URL}
+        - CF_TURN_APP_ID=${CF_TURN_APP_ID}
+        - CF_TURN_APP_SECRET=${CF_TURN_APP_SECRET}
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy-network"
@@ -63,7 +59,7 @@ services:
       - "traefik.http.routers.prosody-room-info.service=prosody-room-info-svc"
       - "traefik.http.services.prosody-room-info-svc.loadbalancer.server.port=5280"
     ports:
-      # XMPP TCP client port
+      # XMPP TCP client port for remote jvbs
       - "5222:5222"
     expose:
       - "5222"
@@ -90,15 +86,13 @@ services:
       prosody:
         condition: service_healthy
     volumes:
-      - ./custom-jicofo.conf:/tmp/custom-conf.tpl:ro
+      - ./custom-jicofo.conf:/defaults/jicofo.conf:ro
       - ./custom-logging.properties:/defaults/logging.properties:ro
-      - ../entrypoint.sh:/tmp/entrypoint.sh:ro
-      - ../.env:/tmp/env-file:ro
-    entrypoint: ["sh", "/tmp/entrypoint.sh"]
     environment:
-      - CONFIG_OUTPUT_PATH=/config/custom-jicofo.conf
-
-      - JICOFO_AUTH_PASSWORD="defaultpassword"
+      - JICOFO_AUTH_PASSWORD=${JICOFO_AUTH_PASSWORD}
+      - XMPP_RECORDER_DOMAIN=recorder.${XMPP_DOMAIN}
+      - JICOFO_OCTO_REGION=${JICOFO_OCTO_REGION}
+      - XMPP_DOMAIN=${XMPP_DOMAIN}
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy-network"
@@ -118,6 +112,7 @@ services:
 
 volumes:
   prosody-data:
+    name: prosody-data
 
 networks:
   proxy-network:

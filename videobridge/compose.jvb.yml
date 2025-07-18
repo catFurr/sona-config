@@ -9,30 +9,30 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
-    expose:
-      # Private API for control and metrics
-      - "8080"
+      start_period: 10s
+    volumes:
+      - ./custom-jvb.conf:/defaults/jvb.conf:ro
+      - ./custom-logging.properties:/defaults/logging.properties:ro
+    environment:
+      - XMPP_SERVER=${XMPP_DOMAIN}
+      - JVB_AUTH_PASSWORD=${JVB_AUTH_PASSWORD}
+      - JVB_MUC_NICKNAME=${JVB_MUC_NICKNAME}
+      - JVB_ADVERTISE_IPS=${JVB_ADVERTISE_IPS}
+      - JVB_INSTANCE_ID=${JVB_INSTANCE_ID}
+      - JVB_OCTO_REGION=${JVB_OCTO_REGION}
+      # LOCAL_ADDRESS calculated by entry script.
     ports:
       # ICE/UDP port for media
       - "10000:10000/udp"
       # Expose colibri websocket for direct access
       - "9090:9090"
-    volumes:
-      - ./custom-jvb.conf:/tmp/custom-conf.tpl:ro # Mount template file
-      - ./custom-logging.properties:/defaults/logging.properties:ro
-      - ../entrypoint.sh:/tmp/entrypoint.sh:ro # Mount the entrypoint script
-      - ../.env:/tmp/env-file:ro # Mount the env file
-    entrypoint: ["sh", "/tmp/entrypoint.sh"]
-    environment:
-      - CONFIG_OUTPUT_PATH=/config/custom-jvb.conf
-
-      - JVB_AUTH_PASSWORD="defined_in_custom_conf"
-      # Env file is mounted and values loaded by entrypoint script
-      # We dont need to define anything here
+    expose:
+      # Private API for control and metrics
+      - "8080"
     networks:
-      - jvb-network
+      - proxy-network
 
 networks:
-  jvb-network:
-    driver: bridge
+  proxy-network:
+    external: true
+    name: proxy-network
