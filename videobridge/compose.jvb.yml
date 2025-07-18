@@ -14,7 +14,7 @@ services:
       - ./custom-jvb.conf:/defaults/jvb.conf:ro
       - ./custom-logging.properties:/defaults/logging.properties:ro
     environment:
-      - XMPP_SERVER=${XMPP_DOMAIN}
+      - XMPP_DOMAIN=${XMPP_DOMAIN}
       - JVB_AUTH_PASSWORD=${JVB_AUTH_PASSWORD}
       - JVB_MUC_NICKNAME=${JVB_MUC_NICKNAME}
       - JVB_ADVERTISE_IPS=${JVB_ADVERTISE_IPS}

@@ -1,6 +1,4 @@
-
 services:
-
   # XMPP Server
   prosody:
     image: jitsi/prosody:stable
@@ -22,17 +20,17 @@ services:
       - ./custom-prosodyBase.cfg.lua:/defaults/prosody.cfg.lua:ro
       - ./custom-prosody.cfg.lua:/defaults/conf.d/jitsi-meet.cfg.lua:ro
     environment:
-        - PROSODY_MODE=client
-        - JICOFO_AUTH_PASSWORD=${JICOFO_AUTH_PASSWORD}
-        - JVB_AUTH_PASSWORD=${JVB_AUTH_PASSWORD}
-        - JVB_AUTH_USER=jvb
-        - XMPP_DOMAIN=${XMPP_DOMAIN}
-        - XMPP_AUTH_DOMAIN=auth.${XMPP_DOMAIN}
-        - XMPP_RECORDER_DOMAIN=recorder.${XMPP_DOMAIN}
+      - PROSODY_MODE=client
+      - JICOFO_AUTH_PASSWORD=${JICOFO_AUTH_PASSWORD}
+      - JVB_AUTH_PASSWORD=${JVB_AUTH_PASSWORD}
+      - JVB_AUTH_USER=jvb
+      - XMPP_DOMAIN=${XMPP_DOMAIN}
+      - XMPP_AUTH_DOMAIN=auth.${XMPP_DOMAIN}
+      - XMPP_RECORDER_DOMAIN=recorder.${XMPP_DOMAIN}
 
-        - KC_HOST_URL=${KC_HOST_URL}
-        - CF_TURN_APP_ID=${CF_TURN_APP_ID}
-        - CF_TURN_APP_SECRET=${CF_TURN_APP_SECRET}
+      - KC_HOST_URL=${KC_HOST_URL}
+      - CF_TURN_APP_ID=${CF_TURN_APP_ID}
+      - CF_TURN_APP_SECRET=${CF_TURN_APP_SECRET}
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy-network"
@@ -55,16 +53,20 @@ services:
       - "traefik.http.routers.prosody-room-info.rule=Host(`${XMPP_DOMAIN}`) && PathPrefix(`/_api/room-info`)"
       - "traefik.http.routers.prosody-room-info.entrypoints=websecure"
       - "traefik.http.routers.prosody-room-info.tls.certresolver=myresolver"
-      - "traefik.http.routers.prosody-room-info.middlewares=prosody-room-info-rewrite@file"
+      - "traefik.http.routers.prosody-room-info.middlewares=prosody-room-info-rewrite@docker"
       - "traefik.http.routers.prosody-room-info.service=prosody-room-info-svc"
       - "traefik.http.services.prosody-room-info-svc.loadbalancer.server.port=5280"
+
+      # Prosody-specific middleware for room info API path rewriting
+      - "traefik.http.middlewares.prosody-room-info-rewrite.replacepathregex.regex=^/_api/room-info(.*)"
+      - "traefik.http.middlewares.prosody-room-info-rewrite.replacepathregex.replacement=/room-info$$1"
     ports:
       # XMPP TCP client port for remote jvbs
       - "5222:5222"
     expose:
       - "5222"
       # - "5269"  # S2S
-      - "5347"  # Component protocol
+      - "5347" # Component protocol
       # XMPP client port proxied by traefik (BOSH, Websockets)
       - "5280"
     networks:
@@ -101,9 +103,15 @@ services:
       - "traefik.http.routers.jicofo-conf-req.rule=Host(`${XMPP_DOMAIN}`) && PathPrefix(`/conference-request/v1`)"
       - "traefik.http.routers.jicofo-conf-req.entrypoints=websecure"
       - "traefik.http.routers.jicofo-conf-req.tls.certresolver=myresolver"
-      - "traefik.http.routers.jicofo-conf-req.middlewares=jicofo-specific-headers@file"
+      - "traefik.http.routers.jicofo-conf-req.middlewares=jicofo-specific-headers@docker"
       - "traefik.http.routers.jicofo-conf-req.service=jicofo-conf-req-svc"
       - "traefik.http.services.jicofo-conf-req-svc.loadbalancer.server.port=8888"
+
+      # Jicofo-specific middleware for CORS and caching headers
+      - "traefik.http.middlewares.jicofo-specific-headers.headers.customResponseHeaders.Cache-Control=no-cache, no-store"
+      - "traefik.http.middlewares.jicofo-specific-headers.headers.customResponseHeaders.Access-Control-Allow-Origin=*"
+      - "traefik.http.middlewares.jicofo-specific-headers.headers.customResponseHeaders.Access-Control-Allow-Methods=GET, POST, OPTIONS"
+      - "traefik.http.middlewares.jicofo-specific-headers.headers.customResponseHeaders.Access-Control-Allow-Headers=DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Content-Type"
     expose:
       # REST including metrics, conference-request, etc.
       - "8888"

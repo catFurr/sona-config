@@ -1,15 +1,34 @@
-# Run this to create the acme.json file
-# docker run --rm -v traefik_acme_storage:/data alpine sh -c "touch /data/acme.json && chmod 600 /data/acme.json"
-
 services:
+  # Init container to create acme.json and generate dynamic traefik config
+  # This generates traefik_dynamic.yml in the traefik_config volume based on environment variables
+  traefik-init:
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
+    container_name: traefik-init
+    volumes:
+      - "traefik_acme_storage:/data"
+      - "traefik_config:/config"
+    environment:
+      - XMPP_DOMAIN=${XMPP_DOMAIN}
+      - JVB_INSTANCES=${JVB_INSTANCES}
+      - JVB_1_PUBLIC_IP=${JVB_1_PUBLIC_IP}
+      - JVB_2_PUBLIC_IP=${JVB_2_PUBLIC_IP}
+      - JVB_3_PUBLIC_IP=${JVB_3_PUBLIC_IP}
+      - JVB_4_PUBLIC_IP=${JVB_4_PUBLIC_IP}
+      - JVB_5_PUBLIC_IP=${JVB_5_PUBLIC_IP}
+    restart: "no"
+
   traefik:
     image: traefik:v3.4
     container_name: traefik
     restart: unless-stopped
+    depends_on:
+      - traefik-init
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "traefik_acme_storage:/data"
-      - "./traefik_dynamic.yml:/etc/traefik/dynamic/traefik_dynamic.yml:ro"
+      - "traefik_config:/etc/traefik/dynamic:ro" # Reads dynamically generated config
     command:
       - "--log.level=INFO"
       - "--accesslog=true"
@@ -59,4 +78,7 @@ networks:
     name: proxy-network
 
 volumes:
-  traefik_acme_storage: {}
+  traefik_acme_storage:
+    name: traefik_acme_storage
+  traefik_config:
+    name: traefik_config
