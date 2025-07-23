@@ -31,7 +31,12 @@ services:
       - KC_HOST_URL=${KC_HOST_URL}
       - CF_TURN_APP_ID=${CF_TURN_APP_ID}
       - CF_TURN_APP_SECRET=${CF_TURN_APP_SECRET}
+    logging:
+      driver: json-file
+      options:
+        labels: "app"
     labels:
+      - "app=prosody"
       - "traefik.enable=true"
       - "traefik.docker.network=proxy-network"
 
@@ -95,7 +100,12 @@ services:
       - XMPP_RECORDER_DOMAIN=recorder.${XMPP_DOMAIN}
       - JICOFO_OCTO_REGION=${JICOFO_OCTO_REGION}
       - XMPP_DOMAIN=${XMPP_DOMAIN}
+    logging:
+      driver: json-file
+      options:
+        labels: "app"
     labels:
+      - "app=jicofo"
       - "traefik.enable=true"
       - "traefik.docker.network=proxy-network"
 

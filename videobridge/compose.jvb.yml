@@ -31,6 +31,12 @@ services:
       - "8080"
     networks:
       - proxy-network
+    logging:
+      driver: json-file
+      options:
+        labels: "app"
+    labels:
+      - "app=jvb"
 
 networks:
   proxy-network:

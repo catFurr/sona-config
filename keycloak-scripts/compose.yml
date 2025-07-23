@@ -55,7 +55,12 @@ services:
       start_period: 60s # Give Keycloak some time to start up before first health check
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        labels: "app"
     labels:
+      - "app=keycloak"
       - "traefik.enable=true"
       - "traefik.docker.network=proxy-network" # Explicitly state network
 
@@ -98,6 +103,12 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        labels: "app"
+    labels:
+      - "app=postgres"
 
   keycloak-webhook-setup:
     build:
@@ -118,6 +129,12 @@ services:
       TARGET_WEBHOOK_SECRET: ${KC_WEBHOOK_SECRET}
       TARGET_WEBHOOK_EVENT_TYPES: ${KC_WEBHOOK_EVENT_TYPES:-UPDATE_PROFILE,VERIFY_EMAIL}
     restart: no
+    logging:
+      driver: json-file
+      options:
+        labels: "app"
+    labels:
+      - "app=keycloak-webhook-setup"
 
 networks:
   proxy-network:

@@ -18,6 +18,12 @@ services:
       - JVB_4_PUBLIC_IP=${JVB_4_PUBLIC_IP}
       - JVB_5_PUBLIC_IP=${JVB_5_PUBLIC_IP}
     restart: "no"
+    logging:
+      driver: json-file
+      options:
+        labels: "app"
+    labels:
+      - "app=traefik-init"
 
   traefik:
     image: traefik:v3.4
@@ -46,8 +52,13 @@ services:
       - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        labels: "app"
     labels:
       - "traefik.enable=true"
+      - "app=traefik"
     ports:
       - "80:80"
       - "443:443"
@@ -74,6 +85,12 @@ services:
       - REGION=${SERVER_REGION:-paris-1}
       - GRAFANA_USERNAME=${GRAFANA_USERNAME}
       - GRAFANA_API_KEY=${GRAFANA_API_KEY}
+    logging:
+      driver: json-file
+      options:
+        labels: "app"
+    labels:
+      - "app=otel-collector"
 
 networks:
   proxy-network:

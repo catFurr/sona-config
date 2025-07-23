@@ -8,6 +8,11 @@ vi .env
 # Start traefik first
 docker compose -f compose.proxy.yml --env-file .env up -d
 
+# Allow otel to get metrics from prosody
+docker network inspect proxy-network | grep "subnet" -i
+vi config/custom-prosodyBase.cfg.lua
+# openmetrics_allow_cidr = "172.19.0.0/16" <-- Update this value.
+
 # Keycloak
 docker compose -f keycloak-scripts/compose.yml --env-file .env up -d
 
