@@ -1,10 +1,40 @@
-# Run this to create the acme.json file
-# docker run --rm -v traefik_acme_storage:/data alpine sh -c "touch /data/acme.json && chmod 600 /data/acme.json"
-
 services:
+  # Init container to create acme.json and generate dynamic traefik config
+  # This generates traefik_dynamic.yml in the traefik_config volume based on environment variables
+  traefik-init:
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
+    container_name: traefik-init
+    volumes:
+      - "traefik_acme_storage:/data"
+      - "traefik_config:/config"
+    environment:
+      - XMPP_DOMAIN=${XMPP_DOMAIN}
+      - JVB_INSTANCES=${JVB_INSTANCES}
+      - JVB_1_PUBLIC_IP=${JVB_1_PUBLIC_IP}
+      - JVB_2_PUBLIC_IP=${JVB_2_PUBLIC_IP}
+      - JVB_3_PUBLIC_IP=${JVB_3_PUBLIC_IP}
+      - JVB_4_PUBLIC_IP=${JVB_4_PUBLIC_IP}
+      - JVB_5_PUBLIC_IP=${JVB_5_PUBLIC_IP}
+    restart: "no"
+    logging:
+      driver: json-file
+      options:
+        labels: "app"
+    labels:
+      - "app=traefik-init"
+
   traefik:
     image: traefik:v3.4
     container_name: traefik
+    restart: unless-stopped
+    depends_on:
+      - traefik-init
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "traefik_acme_storage:/data"
+      - "traefik_config:/etc/traefik/dynamic:ro" # Reads dynamically generated config
     command:
       - "--log.level=INFO"
       - "--accesslog=true"
@@ -20,20 +50,20 @@ services:
       - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/data/acme.json"
       - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        labels: "app"
+    labels:
+      - "traefik.enable=true"
+      - "app=traefik"
     ports:
       - "80:80"
       - "443:443"
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "traefik_acme_storage:/data"
-      - "./traefik_dynamic.yml:/etc/traefik/dynamic/traefik_dynamic.yml:ro"
     networks:
       - proxy-network
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    labels:
-      - "traefik.enable=true"
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
@@ -50,8 +80,17 @@ services:
       - proxy-network
     environment:
       - HOSTNAME=${SERVER_NAME}
+      - SERVER_NAME=${SERVER_NAME}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - REGION=${SERVER_REGION:-paris-1}
       - GRAFANA_USERNAME=${GRAFANA_USERNAME}
       - GRAFANA_API_KEY=${GRAFANA_API_KEY}
+    logging:
+      driver: json-file
+      options:
+        labels: "app"
+    labels:
+      - "app=otel-collector"
 
 networks:
   proxy-network:
@@ -59,4 +98,7 @@ networks:
     name: proxy-network
 
 volumes:
-  traefik_acme_storage: {}
+  traefik_acme_storage:
+    name: traefik_acme_storage
+  traefik_config:
+    name: traefik_config

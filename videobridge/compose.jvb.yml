@@ -9,46 +9,36 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
-    expose:
-      # public API port for colibri websocket
-      - "9090"
-      # private API for control and metrics
-      - "8080"
+      start_period: 10s
+    volumes:
+      - ./custom-jvb.conf:/defaults/jvb.conf:ro
+      - ./custom-logging.properties:/defaults/logging.properties:ro
+    environment:
+      - XMPP_DOMAIN=${XMPP_DOMAIN}
+      - JVB_AUTH_PASSWORD=${JVB_AUTH_PASSWORD}
+      - JVB_MUC_NICKNAME=${JVB_MUC_NICKNAME}
+      - JVB_ADVERTISE_IPS=${JVB_ADVERTISE_IPS}
+      - JVB_INSTANCE_ID=${JVB_INSTANCE_ID}
+      - JVB_OCTO_REGION=${JVB_OCTO_REGION}
+      # LOCAL_ADDRESS calculated by entry script.
     ports:
       # ICE/UDP port for media
       - "10000:10000/udp"
-    volumes:
-      - ./custom-jvb.conf:/tmp/custom-conf.tpl:ro # Mount template file
-      - ../entrypoint.sh:/tmp/entrypoint.sh:ro # Mount the entrypoint script
-      - ../.env:/tmp/env-file:ro # Mount the env file
-    entrypoint: ["sh", "/tmp/entrypoint.sh"]
-    environment:
-      - CONFIG_OUTPUT_PATH=/config/custom-jvb.conf
-
-      - JVB_AUTH_PASSWORD="defaultpassword"
-      - XMPP_SERVER="meet.example.com"
-      - XMPP_DOMAIN=${XMPP_DOMAIN} # Used for traefik labels
-      - JVB_WS_SERVER_ID_FALLBACK="false"
-      - JVB_ADVERTISE_IPS="false"
-      - LOCAL_ADDRESS="0.0.0.0"
-      - JVB_INSTANCE_ID=${JVB_INSTANCE_ID:-jvb-001}
+      # Expose colibri websocket for direct access
+      - "9090:9090"
+    expose:
+      # Private API for control and metrics
+      - "8080"
     networks:
       - proxy-network
+    logging:
+      driver: json-file
+      options:
+        labels: "app"
     labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=proxy-network"
-
-      # Router for JVB Colibri WebSocket (Path-based routing through main domain)
-      - "traefik.http.routers.jvb-colibri-ws.rule=Host(`${XMPP_DOMAIN}`) && PathPrefix(`/colibri-ws/${JVB_INSTANCE_ID}/`)"
-      - "traefik.http.middlewares.jvb-${JVB_INSTANCE_ID}-path-strip.stripPrefix.prefixes=/colibri-ws/${JVB_INSTANCE_ID}"
-      - "traefik.http.routers.jvb-colibri-ws.middlewares=jvb-${JVB_INSTANCE_ID}-path-strip"
-      - "traefik.http.routers.jvb-colibri-ws.entrypoints=websecure"
-      - "traefik.http.routers.jvb-colibri-ws.tls.certresolver=myresolver"
-      - "traefik.http.routers.jvb-colibri-ws.service=jvb-colibri-ws-svc"
-      - "traefik.http.services.jvb-colibri-ws-svc.loadbalancer.server.port=9090"
+      - "app=jvb"
 
 networks:
   proxy-network:
-    driver: bridge
     external: true
+    name: proxy-network
