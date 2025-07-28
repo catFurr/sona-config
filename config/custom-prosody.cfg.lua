@@ -71,6 +71,7 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
         "muc_breakout_rooms";
         "av_moderation";
 
+        "external_services"; -- Handles client requests for STUN/TURN
         "cf_turncredentials"; -- Support CF TURN/STUN
     }
 
@@ -89,7 +90,11 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
 
 VirtualHost "guest.{{ .Env.XMPP_DOMAIN }}"
     authentication = "anonymous"
-    c2s_require_encryption = false
+    modules_enabled = {
+        "smacks"; -- XEP-0198: Stream Management
+    }
+    main_muc = "conference.{{ .Env.XMPP_DOMAIN }}"
+    c2s_require_encryption = true
 
 VirtualHost "auth.{{ .Env.XMPP_DOMAIN }}"
     modules_enabled = {
