@@ -17,6 +17,7 @@ services:
       - JVB_3_PUBLIC_IP=${JVB_3_PUBLIC_IP}
       - JVB_4_PUBLIC_IP=${JVB_4_PUBLIC_IP}
       - JVB_5_PUBLIC_IP=${JVB_5_PUBLIC_IP}
+      - POSTHOG_DOMAIN=${POSTHOG_DOMAIN:-e.sonacove.com}
     restart: "no"
     logging:
       driver: json-file
@@ -30,7 +31,8 @@ services:
     container_name: traefik
     restart: unless-stopped
     depends_on:
-      - traefik-init
+      traefik-init:
+        condition: service_completed_successfully
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "traefik_acme_storage:/data"
@@ -50,6 +52,10 @@ services:
       - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/data/acme.json"
       - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+      - "--serversTransport.insecureSkipVerify=false"
+      - "--serversTransport.forwardingTimeouts.dialTimeout=30s"
+      - "--serversTransport.forwardingTimeouts.responseHeaderTimeout=60s"
+      - "--ping=true"
     security_opt:
       - no-new-privileges:true
     logging:
@@ -59,6 +65,12 @@ services:
     labels:
       - "traefik.enable=true"
       - "app=traefik"
+      # Unlock keep-alive endpoint
+      - "traefik.http.routers.unlock.rule=Host(`${XMPP_DOMAIN}`) && Path(`/_unlock`)"
+      - "traefik.http.routers.unlock.service=ping@internal"
+      - "traefik.http.routers.unlock.entrypoints=websecure"
+      - "traefik.http.routers.unlock.tls.certresolver=myresolver"
+      - "traefik.http.routers.unlock.middlewares=unlock-headers@file"
     ports:
       - "80:80"
       - "443:443"

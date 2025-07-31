@@ -22,22 +22,10 @@ recorder_prefixes = { "recorder@recorder.{{ .Env.XMPP_DOMAIN }}" };
 
 http_default_host = "{{ .Env.XMPP_DOMAIN }}"
 
--- http_cors_override = {
---    bosh = {
---        enabled = false;
---    };
---    websocket = {
---        enabled = false;
---    };
--- }
-consider_bosh_secure = true;
-consider_websocket_secure = true;
-cross_domain_websocket = true;
-cross_domain_bosh = false;
 
 -- https://prosody.im/doc/modules/mod_smacks
 smacks_max_unacked_stanzas = 5;
-smacks_hibernation_time = 60;
+smacks_hibernation_time = 30;
 smacks_max_old_sessions = 1;
 
 -- Cloudflare TURN configuration
@@ -62,14 +50,10 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
         "websocket";
         "smacks"; -- XEP-0198: Stream Management
 
-        "speakerstats";
-        "conference_duration";
-        "room_metadata";
+        "features_identity"; -- New module to announce features
 
-        "end_conference";
         "muc_lobby_rooms";
         "muc_breakout_rooms";
-        "av_moderation";
 
         "external_services"; -- Handles client requests for STUN/TURN
         "cf_turncredentials"; -- Support CF TURN/STUN
