@@ -31,7 +31,8 @@ services:
     container_name: traefik
     restart: unless-stopped
     depends_on:
-      - traefik-init
+      traefik-init:
+        condition: service_completed_successfully
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "traefik_acme_storage:/data"
@@ -54,6 +55,7 @@ services:
       - "--serversTransport.insecureSkipVerify=false"
       - "--serversTransport.forwardingTimeouts.dialTimeout=30s"
       - "--serversTransport.forwardingTimeouts.responseHeaderTimeout=60s"
+      - "--ping=true"
     security_opt:
       - no-new-privileges:true
     logging:

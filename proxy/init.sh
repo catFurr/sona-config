@@ -61,10 +61,12 @@ if [ -n "$JVB_INSTANCES" ]; then
   done
 fi
 
-# Replace placeholders in the template
-sed -i "s|# JVB_MIDDLEWARES_PLACEHOLDER|${JVB_MIDDLEWARES}|" /config/traefik_dynamic.yml
-sed -i "s|# JVB_SERVICES_PLACEHOLDER|${JVB_SERVICES}|" /config/traefik_dynamic.yml
-sed -i "s|# JVB_ROUTERS_PLACEHOLDER|${JVB_ROUTERS}|" /config/traefik_dynamic.yml
+# Use awk for robust multiline replacement
+awk -v r="$JVB_MIDDLEWARES" '{gsub(/# JVB_MIDDLEWARES_PLACEHOLDER/,r)}1' /config/traefik_dynamic.yml > /config/temp.yml && mv /config/temp.yml /config/traefik_dynamic.yml
+awk -v r="$JVB_SERVICES" '{gsub(/# JVB_SERVICES_PLACEHOLDER/,r)}1' /config/traefik_dynamic.yml > /config/temp.yml && mv /config/temp.yml /config/traefik_dynamic.yml
+awk -v r="$JVB_ROUTERS" '{gsub(/# JVB_ROUTERS_PLACEHOLDER/,r)}1' /config/traefik_dynamic.yml > /config/temp.yml && mv /config/temp.yml /config/traefik_dynamic.yml
+
+# Use sed for the simple, single-line replacement
 sed -i "s|\${POSTHOG_DOMAIN}|${POSTHOG_DOMAIN:-e.sonacove.com}|g" /config/traefik_dynamic.yml
 
 echo "traefik_dynamic.yml generated successfully"
