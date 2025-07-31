@@ -1,0 +1,32 @@
+http:
+  middlewares:
+    # Common security headers for most services
+    common-security-headers:
+      headers:
+        stsSeconds: 63072000
+        stsIncludeSubdomains: true
+        forceSTSHeader: true
+        customFrameOptionsValue: "SAMEORIGIN"
+        contentTypeNosniff: true
+        browserXssFilter: true
+        customResponseHeaders:
+          Referrer-Policy: "strict-origin-when-cross-origin"
+
+    # Compression middleware for text-based responses
+    compress-middleware:
+      compress: {}
+
+    # Middleware for unlock keep-alive endpoint
+    unlock-headers:
+      headers:
+        customResponseHeaders:
+          Access-Control-Allow-Origin: "*"
+          Cache-Control: "no-cache, no-store"
+
+    # JVB_MIDDLEWARES_PLACEHOLDER
+
+  services:
+    # JVB_SERVICES_PLACEHOLDER
+
+  routers:
+    # JVB_ROUTERS_PLACEHOLDER
