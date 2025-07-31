@@ -17,6 +17,7 @@ services:
       - JVB_3_PUBLIC_IP=${JVB_3_PUBLIC_IP}
       - JVB_4_PUBLIC_IP=${JVB_4_PUBLIC_IP}
       - JVB_5_PUBLIC_IP=${JVB_5_PUBLIC_IP}
+      - POSTHOG_DOMAIN=${POSTHOG_DOMAIN:-e.sonacove.com}
     restart: "no"
     logging:
       driver: json-file
@@ -50,6 +51,9 @@ services:
       - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/data/acme.json"
       - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+      - "--serversTransport.insecureSkipVerify=false"
+      - "--serversTransport.forwardingTimeouts.dialTimeout=30s"
+      - "--serversTransport.forwardingTimeouts.responseHeaderTimeout=60s"
     security_opt:
       - no-new-privileges:true
     logging:

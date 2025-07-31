@@ -65,7 +65,9 @@ fi
 sed -i "s|# JVB_MIDDLEWARES_PLACEHOLDER|${JVB_MIDDLEWARES}|" /config/traefik_dynamic.yml
 sed -i "s|# JVB_SERVICES_PLACEHOLDER|${JVB_SERVICES}|" /config/traefik_dynamic.yml
 sed -i "s|# JVB_ROUTERS_PLACEHOLDER|${JVB_ROUTERS}|" /config/traefik_dynamic.yml
+sed -i "s|\${POSTHOG_DOMAIN}|${POSTHOG_DOMAIN:-e.sonacove.com}|g" /config/traefik_dynamic.yml
 
 echo "traefik_dynamic.yml generated successfully"
 echo "JVB instances configured: $(echo "$JVB_INSTANCES" | tr ',' ' ')"
+echo "PostHog proxy configured for ${POSTHOG_DOMAIN:-e.sonacove.com}"
 echo "Initialization complete!"
