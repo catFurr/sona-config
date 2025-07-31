@@ -59,6 +59,12 @@ services:
     labels:
       - "traefik.enable=true"
       - "app=traefik"
+      # Unlock keep-alive endpoint
+      - "traefik.http.routers.unlock.rule=Host(`${XMPP_DOMAIN}`) && Path(`/_unlock`)"
+      - "traefik.http.routers.unlock.service=ping@internal"
+      - "traefik.http.routers.unlock.entrypoints=websecure"
+      - "traefik.http.routers.unlock.tls.certresolver=myresolver"
+      - "traefik.http.routers.unlock.middlewares=unlock-headers@file"
     ports:
       - "80:80"
       - "443:443"
