@@ -62,9 +62,10 @@ if [ -n "$JVB_INSTANCES" ]; then
 fi
 
 # Use awk for robust multiline replacement
-awk -v r="$JVB_MIDDLEWARES" '{gsub(/# JVB_MIDDLEWARES_PLACEHOLDER/,r)}1' /config/traefik_dynamic.yml > /config/temp.yml && mv /config/temp.yml /config/traefik_dynamic.yml
-awk -v r="$JVB_SERVICES" '{gsub(/# JVB_SERVICES_PLACEHOLDER/,r)}1' /config/traefik_dynamic.yml > /config/temp.yml && mv /config/temp.yml /config/traefik_dynamic.yml
-awk -v r="$JVB_ROUTERS" '{gsub(/# JVB_ROUTERS_PLACEHOLDER/,r)}1' /config/traefik_dynamic.yml > /config/temp.yml && mv /config/temp.yml /config/traefik_dynamic.yml
+awk -v r="$JVB_MIDDLEWARES" '/# JVB_MIDDLEWARES_PLACEHOLDER/ {print r; next} {print}' /config/traefik_dynamic.yml > /config/temp.yml && mv /config/temp.yml /config/traefik_dynamic.yml
+awk -v r="$JVB_SERVICES" '/# JVB_SERVICES_PLACEHOLDER/ {print r; next} {print}' /config/traefik_dynamic.yml > /config/temp.yml && mv /config/temp.yml /config/traefik_dynamic.yml
+awk -v r="$JVB_ROUTERS" '/# JVB_ROUTERS_PLACEHOLDER/ {print r; next} {print}' /config/traefik_dynamic.yml > /config/temp.yml && mv /config/temp.yml /config/traefik_dynamic.yml
+
 
 # Use sed for the simple, single-line replacement
 sed -i "s|\${POSTHOG_DOMAIN}|${POSTHOG_DOMAIN:-e.sonacove.com}|g" /config/traefik_dynamic.yml
