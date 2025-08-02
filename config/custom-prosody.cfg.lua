@@ -67,7 +67,7 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
     conference_duration_component = "conferenceduration.{{ .Env.XMPP_DOMAIN }}"
     end_conference_component = "endconference.{{ .Env.XMPP_DOMAIN }}"
     av_moderation_component = "avmoderation.{{ .Env.XMPP_DOMAIN }}"
-    c2s_require_encryption = true
+    c2s_require_encryption = false
 
     -- muc_lobby_whitelist = { "recorder.{{ .Env.XMPP_DOMAIN }}" } -- Here we can whitelist jibri to enter lobby enabled rooms
     -- smacks_max_hibernated_sessions = 1
@@ -78,7 +78,7 @@ VirtualHost "guest.{{ .Env.XMPP_DOMAIN }}"
         "smacks"; -- XEP-0198: Stream Management
     }
     main_muc = "conference.{{ .Env.XMPP_DOMAIN }}"
-    c2s_require_encryption = true
+    c2s_require_encryption = false
 
 VirtualHost "auth.{{ .Env.XMPP_DOMAIN }}"
     modules_enabled = {
