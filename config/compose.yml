@@ -1,7 +1,7 @@
 services:
   # XMPP Server
   prosody:
-    image: jitsi/prosody:stable
+    image: jitsi/prosody:stable-10431
     container_name: prosody
     restart: unless-stopped
     healthcheck:
@@ -24,6 +24,7 @@ services:
       - JICOFO_AUTH_PASSWORD=${JICOFO_AUTH_PASSWORD}
       - JVB_AUTH_PASSWORD=${JVB_AUTH_PASSWORD}
       - JVB_AUTH_USER=jvb
+      - PROSODY_TRUSTED_PROXIES_CIDR=${PROSODY_TRUSTED_PROXIES_CIDR:-172.18.0.0/16}
       - XMPP_DOMAIN=${XMPP_DOMAIN}
       - XMPP_AUTH_DOMAIN=auth.${XMPP_DOMAIN}
       - XMPP_RECORDER_DOMAIN=recorder.${XMPP_DOMAIN}
@@ -79,7 +80,7 @@ services:
 
   # Focus component
   jicofo:
-    image: jitsi/jicofo:stable
+    image: jitsi/jicofo:stable-10431
     container_name: jicofo
     restart: unless-stopped
     healthcheck:

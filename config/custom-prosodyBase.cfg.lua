@@ -41,9 +41,6 @@ modules_enabled = {
 	"time"; -- Let others know the time here on this server
 	"uptime"; -- Report how long server has been running
 	"csi_simple"; -- Simple but effective traffic optimizations for mobile devices
-	"invites"; -- Create and manage invites
-	"invites_adhoc"; -- Allow admins/users to create invitations via their client
-	"invites_register"; -- Allows invited users to create accounts
 
 	-- HTTP modules
 	"bosh"; -- Enable BOSH clients, aka "Jabber over HTTP"
@@ -113,6 +110,7 @@ http_interfaces = { "*", "::" }
 trusted_proxies = {
 	"127.0.0.1";
 	"::1";
+	"{{ .Env.PROSODY_TRUSTED_PROXIES_CIDR }}";
 }
 
 -- Force certificate authentication for server-to-server connections?
@@ -166,7 +164,7 @@ statistics = "internal"
 statistics_interval = "manual"  -- Single scraper, use manual for optimal performance
 
 -- OpenMetrics access control - allow access from Docker network
-openmetrics_allow_cidr = "172.18.0.0/16"  -- Allow Docker proxy network
+openmetrics_allow_cidr = "{{ .Env.PROSODY_TRUSTED_PROXIES_CIDR }}"  -- Allow Docker proxy network
 
 certificates = "/config/certs"
 
