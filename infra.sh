@@ -3,24 +3,45 @@
 set -e
 
 usage() {
-    echo "Usage: $0 <username> <password>"
-    echo "This script must be run as root to set up a new user and install Docker"
+    echo "Usage: $0 [username] [password]"
+    echo "This script can be run in two modes:"
+    echo "1. With arguments: $0 <username> <password>"
+    echo "2. Without arguments: uses default values (for cloud-init)"
     echo "Example: $0 john mypassword123"
+    echo "Note: This script must be run as root"
     exit 1
 }
 
+# Default values for cloud-init mode
+DEFAULT_USERNAME="admin"
+DEFAULT_PASSWORD="YourSecurePassword123!"
+DEFAULT_SSH_KEY="ssh-ed25519 AAA_some_stuff_here+m2K_more_stuff_Amc myname@site.com"
+
+# Check if running as root
 if [ "$EUID" -ne 0 ]; then
     echo "Error: This script must be run as root"
     usage
 fi
 
-if [ $# -lt 2 ]; then
-    echo "Error: Username and password must be provided"
+# Parse command line arguments
+if [ $# -eq 2 ]; then
+    # Standalone mode with arguments
+    USERNAME="$1"
+    PASSWORD="$2"
+    echo "Running in standalone mode with provided arguments"
+    echo "Username: $USERNAME"
+    echo "Password: [hidden]"
+elif [ $# -eq 0 ]; then
+    # Cloud-init mode with defaults
+    USERNAME="$DEFAULT_USERNAME"
+    PASSWORD="$DEFAULT_PASSWORD"
+    echo "Running in cloud-init mode with default values"
+    echo "Username: $USERNAME"
+    echo "Password: [hidden]"
+else
+    echo "Error: Invalid number of arguments"
     usage
 fi
-
-USERNAME="$1"
-PASSWORD="$2"
 
 # Make apt completely non-interactive
 export DEBIAN_FRONTEND=noninteractive
@@ -45,11 +66,25 @@ touch .ssh/authorized_keys
 chmod 600 .ssh/authorized_keys
 EOF
 
-# Copy SSH keys from root if they exist
-if [ -f /root/.ssh/authorized_keys ]; then
-    cp /root/.ssh/authorized_keys /home/$USERNAME/.ssh/authorized_keys
+# Add SSH public key to the user's authorized_keys
+# In cloud-init mode, use the default key; in standalone mode, copy from root if available
+if [ $# -eq 0 ]; then
+    # Cloud-init mode: use hardcoded SSH key
+    echo "$DEFAULT_SSH_KEY" > /home/$USERNAME/.ssh/authorized_keys
     chown $USERNAME:$USERNAME /home/$USERNAME/.ssh/authorized_keys
     chmod 600 /home/$USERNAME/.ssh/authorized_keys
+    echo "✓ SSH key configured for cloud-init mode"
+else
+    # Standalone mode: copy SSH keys from root if they exist
+    if [ -f /root/.ssh/authorized_keys ]; then
+        cp /root/.ssh/authorized_keys /home/$USERNAME/.ssh/authorized_keys
+        chown $USERNAME:$USERNAME /home/$USERNAME/.ssh/authorized_keys
+        chmod 600 /home/$USERNAME/.ssh/authorized_keys
+        echo "✓ SSH keys copied from root"
+    else
+        echo "⚠ No SSH keys found in /root/.ssh/authorized_keys"
+        echo "   You may need to manually add SSH keys for user $USERNAME"
+    fi
 fi
 
 echo "Installing Docker..."
@@ -120,7 +155,7 @@ fi
 
 # Check if SSH keys were copied
 if [ -s /home/$USERNAME/.ssh/authorized_keys ]; then
-    echo "✓ SSH keys copied to $USERNAME"
+    echo "✓ SSH keys configured for $USERNAME"
 else
     echo "✗ SSH keys not found or empty"
     exit 1

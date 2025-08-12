@@ -49,8 +49,10 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
 
         "websocket";
         "smacks"; -- XEP-0198: Stream Management
+        "ping"; -- Enable mod_ping
 
         "features_identity"; -- New module to announce features
+        "conference_duration";
 
         "muc_lobby_rooms";
         "muc_breakout_rooms";
@@ -64,7 +66,6 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
     lobby_muc = "lobby.{{ .Env.XMPP_DOMAIN }}"
     breakout_rooms_muc = "breakout.{{ .Env.XMPP_DOMAIN }}"
     speakerstats_component = "speakerstats.{{ .Env.XMPP_DOMAIN }}"
-    conference_duration_component = "conferenceduration.{{ .Env.XMPP_DOMAIN }}"
     end_conference_component = "endconference.{{ .Env.XMPP_DOMAIN }}"
     av_moderation_component = "avmoderation.{{ .Env.XMPP_DOMAIN }}"
     c2s_require_encryption = false
@@ -94,7 +95,9 @@ Component "internal-muc.{{ .Env.XMPP_DOMAIN }}" "muc"
     modules_enabled = {
         "muc_hide_all";
         "muc_filter_access";
+        "ping";
     }
+    admins = { "focus@auth.{{ .Env.XMPP_DOMAIN }}", "jvb@auth.{{ .Env.XMPP_DOMAIN }}" }
     restrict_room_creation = true
     muc_filter_whitelist="auth.{{ .Env.XMPP_DOMAIN }}"
     muc_room_locking = false
@@ -116,6 +119,7 @@ Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
         "muc_hide_all";
         "muc_rate_limit";
     }
+    admins = { "focus@auth.{{ .Env.XMPP_DOMAIN }}" }
     -- The size of the cache that saves state for IP addresses
     rate_limit_cache_size = 10000;
     muc_room_cache_size = 10000
@@ -158,6 +162,7 @@ Component "breakout.{{ .Env.XMPP_DOMAIN }}" "muc"
         "muc_domain_mapper";
         "muc_rate_limit";
     }
+    admins = { "focus@auth.{{ .Env.XMPP_DOMAIN }}" }
     restrict_room_creation = true
     muc_room_cache_size = 10000
     muc_room_locking = false
@@ -172,13 +177,13 @@ Component "focus.{{ .Env.XMPP_DOMAIN }}" "client_proxy"
 Component "speakerstats.{{ .Env.XMPP_DOMAIN }}" "speakerstats_component"
     muc_component = "conference.{{ .Env.XMPP_DOMAIN }}"
 
-Component "conferenceduration.{{ .Env.XMPP_DOMAIN }}" "conference_duration_component"
-    muc_component = "conference.{{ .Env.XMPP_DOMAIN }}"
-
 Component "endconference.{{ .Env.XMPP_DOMAIN }}" "end_conference"
     muc_component = "conference.{{ .Env.XMPP_DOMAIN }}"
 
 Component "avmoderation.{{ .Env.XMPP_DOMAIN }}" "av_moderation_component"
+    muc_component = "conference.{{ .Env.XMPP_DOMAIN }}"
+
+Component "filesharing.{{ .Env.XMPP_DOMAIN }}" "filesharing_component"
     muc_component = "conference.{{ .Env.XMPP_DOMAIN }}"
 
 Component "metadata.{{ .Env.XMPP_DOMAIN }}" "room_metadata_component"

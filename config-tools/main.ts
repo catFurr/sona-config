@@ -58,6 +58,12 @@ const jvbReferenceTargets: DownloadTarget[] = [
     url: GITHUB_URL + "docker-jitsi-meet/master/jvb/rootfs/defaults/logging.properties",
     path: join(PATHS.jvbReference, "logging.properties"),
   },
+  {
+    url:
+      GITHUB_URL +
+      "jitsi-videobridge/master/jitsi-media-transform/src/main/resources/reference.conf",
+    path: join(PATHS.jvbReference, "jitsi-media-transform-reference.conf"),
+  },
 ];
 
 const jicofoReferenceTargets: DownloadTarget[] = [
