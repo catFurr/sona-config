@@ -1,0 +1,212 @@
+--[[
+Meeting Hosts for Sonacove MUC (Component module)
+
+Ensures sensible host (moderator/owner) assignment and room lifecycle: first eligible (logged-in) creator becomes host, host handover on leave, and timed destruction if no host remains. Adds a creation-time subscription admission rule without impacting general authentication.
+
+- First eligible creator becomes host: On join, if there is no host and the joining user is logged in, promote them to affiliation 'owner' (moderator role). Any scheduled destruction is canceled on join.
+- Handover on host leave: When the last non-admin owner leaves, promote any logged-in participant to owner. If no eligible participant exists, schedule room destruction after a configurable delay.
+- Creation-time subscription check: On first join (room creation attempt), verifies the authenticated user's subscription is 'active' or 'trialing' (from session context). If not, denies room creation.
+
+Configuration:
+- meeting_host_destroy_delay (number, seconds): Delay before attempting to destroy a room with no host (default: 120).
+- Module should be enabled under the conference MUC component:
+  Component "conference.${XMPP_DOMAIN}" "muc"
+      modules_enabled = {
+          ...
+          "meeting_host";
+      }
+
+]]
+
+local jid = require 'util.jid';
+local jid_host = jid.host;
+local socket = require 'socket';
+local st = require 'util.stanza';
+
+local util = module:require 'util';
+local is_admin = util.is_admin;
+local is_healthcheck_room = util.is_healthcheck_room;
+local get_room_from_jid = util.get_room_from_jid;
+local ends_with = util.ends_with;
+
+local muc_domain_base = module:get_option_string('muc_mapper_domain_base');
+local destroy_delay_seconds = module:get_option_number('meeting_host_destroy_delay', 120);
+
+
+-- Helpers
+local function is_focus_occupant(occupant)
+    return occupant and occupant.nick and ends_with(occupant.nick, '/focus');
+end
+
+local function occupant_is_logged_in(occupant, session)
+    -- Treat JWT-auth and local auth users as logged in; fallback to domain check
+    if session and (session.auth_token or session.username) then
+        return true;
+    end
+    if occupant and occupant.bare_jid and muc_domain_base then
+        return jid_host(occupant.bare_jid) == muc_domain_base;
+    end
+    return false;
+end
+
+local function has_non_admin_owner(room)
+    for _, o in room:each_occupant() do
+        if not is_admin(o.bare_jid) and not is_focus_occupant(o) then
+            local aff = room:get_affiliation(o.bare_jid);
+            if aff == 'owner' or aff == 'admin' then
+                return true;
+            end
+        end
+    end
+    return false;
+end
+
+local function find_logged_in_candidate(room)
+    for _, o in room:each_occupant() do
+        if not is_admin(o.bare_jid) and not is_focus_occupant(o) then
+            if occupant_is_logged_in(o) then
+                return o;
+            end
+        end
+    end
+    return nil;
+end
+
+local function promote_owner(room, occupant)
+    if occupant and occupant.bare_jid then
+        room:set_affiliation(true, occupant.bare_jid, 'owner');
+    end
+end
+
+local function schedule_room_destruction(room)
+    if not room then return end
+    if is_healthcheck_room(room.jid) then return end
+
+    -- If a destruction is already scheduled, don't schedule another
+    if room._data.meeting_host_destroy_at then
+        return;
+    end
+
+    room._data.meeting_host_destroy_at = socket.gettime() + destroy_delay_seconds;
+    local target_room_jid = room.jid;
+
+    module:log('info', 'Scheduling room destruction for %s in %ds', target_room_jid, destroy_delay_seconds);
+
+    local function try_destroy()
+        local now = socket.gettime();
+        local target_room = get_room_from_jid(target_room_jid);
+
+        if not target_room then
+            return;
+        end
+
+        local destroy_at = target_room._data and target_room._data.meeting_host_destroy_at;
+        if not destroy_at then
+            return; -- cancelled
+        end
+
+        if now < destroy_at then
+            -- Too early; re-check shortly to be resilient to clock drift (1s)
+            module:add_timer(1, try_destroy);
+            return;
+        end
+
+        if has_non_admin_owner(target_room) then
+            target_room._data.meeting_host_destroy_at = nil;
+            return;
+        end
+
+        module:log('info', 'Destroying room %s due to no moderator present', target_room_jid);
+        prosody.events.fire_event('maybe-destroy-room', {
+            room = target_room;
+            reason = 'no-moderator-present';
+            caller = module:get_name();
+        });
+        -- Clear the schedule regardless
+        target_room._data.meeting_host_destroy_at = nil;
+    end
+
+    module:add_timer(destroy_delay_seconds, try_destroy);
+end
+
+-- Events
+module:hook('muc-occupant-joined', function (event)
+    local room, occupant, session = event.room, event.occupant, event.origin;
+
+    if is_healthcheck_room(room.jid) or is_admin(occupant.bare_jid) or is_focus_occupant(occupant) then
+        return;
+    end
+
+    -- If there is no non-admin owner and the joiner is logged in, promote them
+    if not has_non_admin_owner(room) and occupant_is_logged_in(occupant, session) then
+        promote_owner(room, occupant);
+    end
+
+    -- Cancel any scheduled destruction on join
+    if room._data.meeting_host_destroy_at then
+        room._data.meeting_host_destroy_at = nil;
+        module:log('debug', 'Cancelled scheduled room destruction for %s (participant joined)', room.jid);
+    end
+end, 2);
+
+-- Gate room creation with subscription check only
+module:hook('muc-occupant-pre-join', function (event)
+    local room, occupant, session, stanza, origin = event.room, event.occupant, event.origin, event.stanza, event.origin;
+
+    if is_healthcheck_room(room.jid) or is_admin(occupant.bare_jid) or is_focus_occupant(occupant) then
+        return;
+    end
+
+    -- Only enforce on room creation attempts (first join)
+    if room:has_occupant() then
+        return;
+    end
+
+    -- Subscription check (active or trialing)
+    local ctx_user = session and session.jitsi_meet_context_user;
+    local sub_status = ctx_user and ctx_user.subscription_status;
+    if not (sub_status == 'active' or sub_status == 'trialing') then
+        local reply = st.error_reply(stanza, 'auth', 'forbidden', 'subscription-required');
+        origin.send(reply:tag('x', { xmlns = 'http://jabber.org/protocol/muc' }));
+        return true;
+    end
+
+    -- Mark creator for tracing
+    room._data.meeting_host_first_bare_jid = room._data.meeting_host_first_bare_jid or occupant.bare_jid;
+end, 3);
+
+module:hook('muc-occupant-pre-leave', function (event)
+    local room, leaving_occupant = event.room, event.occupant;
+
+    if is_healthcheck_room(room.jid) then
+        return;
+    end
+
+    -- Compute if any other non-admin owner will remain after this occupant leaves
+    local another_owner_exists = false;
+    for _, o in room:each_occupant() do
+        if o ~= leaving_occupant and not is_admin(o.bare_jid) and not is_focus_occupant(o) then
+            local aff = room:get_affiliation(o.bare_jid);
+            if aff == 'owner' or aff == 'admin' then
+                another_owner_exists = true;
+                break;
+            end
+        end
+    end
+
+    if another_owner_exists then
+        return;
+    end
+
+    -- No other owners; try to promote a logged-in user, otherwise schedule destruction
+    local candidate = find_logged_in_candidate(room);
+    if candidate then
+        module:log('info', 'Promoting logged-in participant %s to owner in %s', candidate.bare_jid or 'unknown', room.jid);
+        promote_owner(room, candidate);
+        return;
+    end
+
+    schedule_room_destruction(room);
+end, 2);
+
+

@@ -118,6 +118,9 @@ Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
         "token_verification";
         "muc_hide_all";
         "muc_rate_limit";
+        "muc_max_occupants";
+        -- Custom: meeting host management (assign moderators, schedule destruction)
+        "meeting_host";
     }
     admins = { "focus@auth.{{ .Env.XMPP_DOMAIN }}" }
     -- The size of the cache that saves state for IP addresses
@@ -130,6 +133,11 @@ Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
     }
     muc_tombstones = false
     muc_room_allow_persistent = false
+    muc_access_whitelist = {
+        "focus@auth.{{ .Env.XMPP_DOMAIN }}";
+    }
+    muc_max_occupants = 100
+    meeting_host_destroy_delay = 300
 
 VirtualHost "recorder.{{ .Env.XMPP_DOMAIN }}"
     modules_enabled = {
