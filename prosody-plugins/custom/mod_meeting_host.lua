@@ -144,10 +144,10 @@ module:hook('muc-occupant-joined', function (event)
         -- Cancel any scheduled destruction on join
         if room._data.meeting_host_destroy_at then
             room._data.meeting_host_destroy_at = nil;
-            module:log('debug', 'Cancelled scheduled room destruction for %s (participant joined)', room.jid);
+            module:log('info', 'Cancelled scheduled room destruction for %s (participant joined)', room.jid);
         end
     end
-end, 2);
+end, 2); -- run before av moderation, filesharing, breakout and polls
 
 -- Gate room creation with subscription check only
 module:hook('muc-occupant-pre-join', function (event)
@@ -159,6 +159,7 @@ module:hook('muc-occupant-pre-join', function (event)
 
     -- Only enforce on room creation attempts (first join)
     if room:has_occupant() then
+        module:log('info', 'Room %s already has occupants, skipping subscription check', room.jid);
         return;
     end
 
@@ -166,7 +167,7 @@ module:hook('muc-occupant-pre-join', function (event)
     local ctx_user = session and session.jitsi_meet_context_user;
     local sub_status = ctx_user and ctx_user.subscription_status;
 
-    module:log('debug', 'Checking subscription for room creation: user=%s, sub_status=%s', 
+    module:log('info', 'Checking subscription for room creation: user=%s, sub_status=%s', 
                ctx_user and ctx_user.id or 'nil', sub_status or 'nil');
 
     if not (sub_status == 'active' or sub_status == 'trialing') then
@@ -177,7 +178,7 @@ module:hook('muc-occupant-pre-join', function (event)
 
     -- Mark creator for tracing
     room._data.meeting_host_first_bare_jid = room._data.meeting_host_first_bare_jid or occupant.bare_jid;
-end, 3);
+end, 20);  -- run after token verification but before max occupants and rate limit
 
 module:hook('muc-occupant-left', function (event)
     local room, leaving_occupant = event.room, event.occupant;
@@ -211,6 +212,6 @@ module:hook('muc-occupant-left', function (event)
     end
 
     schedule_room_destruction(room);
-end, 2);
+end, -1); -- run after breakout rooms
 
 
