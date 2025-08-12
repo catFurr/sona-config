@@ -1,7 +1,7 @@
 --[[
 Meeting Hosts for Sonacove MUC (Component module)
 
-Ensures sensible host (moderator/owner) assignment and room lifecycle: first eligible (logged-in) creator becomes host, host handover on leave, and timed destruction if no host remains. Adds a creation-time subscription admission rule without impacting general authentication.
+Ensures host (moderator+owner) assignment and room lifecycle: first eligible (logged-in) creator becomes host, host handover on leave, and timed destruction if no host remains. Adds a creation-time subscription admission rule.
 
 - First eligible creator becomes host: On join, if there is no host and the joining user is logged in, promote them to affiliation 'owner' (moderator role). Any scheduled destruction is canceled on join.
 - Handover on host leave: When the last non-admin owner leaves, promote any logged-in participant to owner. If no eligible participant exists, schedule room destruction after a configurable delay.
@@ -53,7 +53,7 @@ local function has_non_admin_owner(room)
     for _, o in room:each_occupant() do
         if not is_admin(o.bare_jid) and not is_focus_occupant(o) then
             local aff = room:get_affiliation(o.bare_jid);
-            if aff == 'owner' or aff == 'admin' then
+            if aff == 'owner' then
                 return true;
             end
         end
@@ -140,12 +140,12 @@ module:hook('muc-occupant-joined', function (event)
     -- If there is no non-admin owner and the joiner is logged in, promote them
     if not has_non_admin_owner(room) and occupant_is_logged_in(occupant, session) then
         promote_owner(room, occupant);
-    end
 
-    -- Cancel any scheduled destruction on join
-    if room._data.meeting_host_destroy_at then
-        room._data.meeting_host_destroy_at = nil;
-        module:log('debug', 'Cancelled scheduled room destruction for %s (participant joined)', room.jid);
+        -- Cancel any scheduled destruction on join
+        if room._data.meeting_host_destroy_at then
+            room._data.meeting_host_destroy_at = nil;
+            module:log('debug', 'Cancelled scheduled room destruction for %s (participant joined)', room.jid);
+        end
     end
 end, 2);
 
@@ -165,6 +165,10 @@ module:hook('muc-occupant-pre-join', function (event)
     -- Subscription check (active or trialing)
     local ctx_user = session and session.jitsi_meet_context_user;
     local sub_status = ctx_user and ctx_user.subscription_status;
+
+    module:log('debug', 'Checking subscription for room creation: user=%s, sub_status=%s', 
+               ctx_user and ctx_user.id or 'nil', sub_status or 'nil');
+
     if not (sub_status == 'active' or sub_status == 'trialing') then
         local reply = st.error_reply(stanza, 'auth', 'forbidden', 'subscription-required');
         origin.send(reply:tag('x', { xmlns = 'http://jabber.org/protocol/muc' }));
@@ -175,7 +179,7 @@ module:hook('muc-occupant-pre-join', function (event)
     room._data.meeting_host_first_bare_jid = room._data.meeting_host_first_bare_jid or occupant.bare_jid;
 end, 3);
 
-module:hook('muc-occupant-pre-leave', function (event)
+module:hook('muc-occupant-left', function (event)
     local room, leaving_occupant = event.room, event.occupant;
 
     if is_healthcheck_room(room.jid) then
@@ -187,7 +191,7 @@ module:hook('muc-occupant-pre-leave', function (event)
     for _, o in room:each_occupant() do
         if o ~= leaving_occupant and not is_admin(o.bare_jid) and not is_focus_occupant(o) then
             local aff = room:get_affiliation(o.bare_jid);
-            if aff == 'owner' or aff == 'admin' then
+            if aff == 'owner' then
                 another_owner_exists = true;
                 break;
             end
