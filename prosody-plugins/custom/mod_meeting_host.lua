@@ -35,6 +35,30 @@ local destroy_delay_seconds = module:get_option_number('meeting_host_destroy_del
 
 
 -- Helpers
+local function check_subscription_and_reject_if_invalid(origin, stanza, session, action_label)
+    -- Get context user from session or origin
+    local ctx_user = (session and session.jitsi_meet_context_user) or (origin and origin.jitsi_meet_context_user);
+    local sub_status = ctx_user and ctx_user.subscription_status;
+
+    module:log('info', 'Checking subscription for %s: user=%s, sub_status=%s',
+        action_label or 'action', ctx_user and ctx_user.id or 'nil', sub_status or 'nil');
+
+    if not (sub_status == 'active' or sub_status == 'trialing') then
+        module:log('info', 'invalid subscription status!');
+        if origin and stanza then
+            origin.send(st.error_reply(
+                stanza,
+                'cancel',
+                'not-allowed',
+                'Subscription required to create or start this meeting'
+            ));
+        end
+        return true; -- Subscription check failed, block the action
+    end
+
+    return false; -- Subscription check passed, allow the action
+end
+
 local function is_focus_occupant(occupant)
     return occupant and occupant.nick and ends_with(occupant.nick, '/focus');
 end
@@ -156,6 +180,21 @@ local function schedule_room_destruction(room)
     module:add_timer(destroy_delay_seconds, try_destroy);
 end
 
+-- Also guard room creation attempts before occupants join, similar to token_verification
+module:hook('muc-room-pre-create', function (event)
+    local origin, stanza = event.origin, event.stanza;
+
+    -- Allow admins through
+    if stanza and stanza.attr and stanza.attr.from and is_admin(stanza.attr.from) then
+        return;
+    end
+
+    -- Block if subscription check fails
+    if check_subscription_and_reject_if_invalid(origin, stanza, origin, 'room creation') then
+        return true;
+    end
+end, 99);
+
 -- Events
 module:hook('muc-occupant-pre-join', function (event)
     local room, occupant, session, stanza, origin = event.room, event.occupant, event.origin, event.stanza, event.origin;
@@ -172,16 +211,9 @@ module:hook('muc-occupant-pre-join', function (event)
         end
     end
 
-    -- Subscription check (active or trialing)
-    local ctx_user = session and session.jitsi_meet_context_user;
-    local sub_status = ctx_user and ctx_user.subscription_status;
-
-    module:log('info', 'Checking subscription for room creation: user=%s, sub_status=%s', 
-               ctx_user and ctx_user.id or 'nil', sub_status or 'nil');
-
-    if not (sub_status == 'active' or sub_status == 'trialing') then
-        -- Returning any value other than nil will halt processing of the event
-        return false, 'subscription-required';
+    -- Subscription check (active or trialing) for the first non-system occupant
+    if check_subscription_and_reject_if_invalid(origin, stanza, session, 'occupant pre-join') then
+        return true;
     end
 
     -- Mark creator for tracing
