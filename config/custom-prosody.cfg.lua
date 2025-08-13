@@ -52,6 +52,8 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
 
         "muc_lobby_rooms";
         "muc_breakout_rooms";
+
+        "subscription_check";
     }
 
     main_muc = "conference.{{ .Env.XMPP_DOMAIN }}"
@@ -111,7 +113,7 @@ Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
         "muc_hide_all";
         "muc_rate_limit";
         "muc_max_occupants";
-        -- Custom: meeting host management (assign moderators, schedule destruction)
+
         "meeting_host";
     }
     admins = { "focus@auth.{{ .Env.XMPP_DOMAIN }}" }

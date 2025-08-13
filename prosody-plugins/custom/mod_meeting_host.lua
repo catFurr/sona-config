@@ -1,11 +1,10 @@
 --[[
 Meeting Hosts for Sonacove MUC (Component module)
 
-Ensures host (moderator+owner) assignment and room lifecycle: first eligible (logged-in) creator becomes host, host handover on leave, and timed destruction if no host remains. Adds a creation-time subscription admission rule.
+Ensures first eligible (logged-in) creator becomes host, host handover on leave, and timed destruction if no host remains.
 
-- First eligible creator becomes host: On join, if there is no host and the joining user is logged in, promote them to affiliation 'owner' (moderator role). Any scheduled destruction is canceled on join.
-- Handover on host leave: When the last non-admin owner leaves, promote any logged-in participant to owner. If no eligible participant exists, schedule room destruction after a configurable delay.
-- Creation-time subscription check: On first join (room creation attempt), verifies the authenticated user's subscription is 'active' or 'trialing' (from session context). If not, denies room creation.
+- On join, if there is no host and the joining user is logged in, promote them to affiliation 'owner' (moderator role). Any scheduled destruction is canceled on join.
+- When the last non-admin owner leaves, promote any logged-in participant to owner. If no eligible participant exists, schedule room destruction after a configurable delay.
 
 Configuration:
 - meeting_host_destroy_delay (number, seconds): Delay before attempting to destroy a room with no host (default: 120).
@@ -181,37 +180,6 @@ module:hook('muc-occupant-joined', function (event)
     end
 end, 2); -- run before av moderation, filesharing, breakout and polls
 
--- Gate room creation with subscription check only
-module:hook('post-jitsi-authentication', function (event)
-    local room, occupant, session, stanza, origin = event.room, event.occupant, event.origin, event.stanza, event.origin;
-
-    if is_healthcheck_room(room.jid) or is_admin(occupant.bare_jid) or is_focus_occupant(occupant) then
-        return;
-    end
-
-    -- Are we the first non-system occupant? (room creation)
-    for _, o in room:each_occupant() do
-        if o ~= occupant and not is_admin(o.bare_jid) and not is_focus_occupant(o) then
-            module:log('info', 'Room %s already has occupants, skipping subscription check', room.jid);
-            return;
-        end
-    end
-
-    -- Subscription check (active or trialing)
-    local ctx_user = session and session.jitsi_meet_context_user;
-    local sub_status = ctx_user and ctx_user.subscription_status;
-
-    module:log('info', 'Checking subscription for room creation: user=%s, sub_status=%s', 
-               ctx_user and ctx_user.id or 'nil', sub_status or 'nil');
-
-    if not (sub_status == 'active' or sub_status == 'trialing') then
-        return false, 'subscription-required';
-    end
-
-    -- Mark creator for tracing
-    room._data.meeting_host_first_bare_jid = room._data.meeting_host_first_bare_jid or occupant.bare_jid;
-end);
-
 module:hook('muc-occupant-left', function (event)
     local room, leaving_occupant = event.room, event.occupant;
 
@@ -238,12 +206,12 @@ module:hook('muc-occupant-left', function (event)
     -- No other owners; try to promote a logged-in user, otherwise schedule destruction
     local candidate = find_logged_in_candidate(room);
     if candidate then
-        module:log('info', 'Promoting logged-in participant %s to owner in %s', candidate.bare_jid or 'unknown', room.jid);
+        module:log('debug', 'Promoting logged-in participant %s to owner in %s', candidate.bare_jid or 'unknown', room.jid);
         promote_owner(room, candidate);
         return;
     end
 
-    schedule_room_destruction(room);
+    -- schedule_room_destruction(room);
 end, -1); -- run after breakout rooms
 
 
