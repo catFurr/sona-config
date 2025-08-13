@@ -29,6 +29,8 @@ local is_healthcheck_room = util.is_healthcheck_room;
 local get_room_from_jid = util.get_room_from_jid;
 local ends_with = util.ends_with;
 
+local system_chat = module:require 'custom/mod_system_chat';
+
 local muc_domain_base = module:get_option_string('muc_mapper_domain_base');
 local destroy_delay_seconds = module:get_option_number('meeting_host_destroy_delay', 120);
 
@@ -91,6 +93,28 @@ local function schedule_room_destruction(room)
     local target_room_jid = room.jid;
 
     module:log('info', 'Scheduling room destruction for %s in %ds', target_room_jid, destroy_delay_seconds);
+    
+    -- Notify all participants that the meeting will end soon
+    local minutes = math.floor(destroy_delay_seconds / 60);
+    local seconds = destroy_delay_seconds % 60;
+    local time_message;
+    if minutes > 0 and seconds > 0 then
+        time_message = string.format("%d minute%s and %d second%s", 
+            minutes, minutes == 1 and "" or "s", 
+            seconds, seconds == 1 and "" or "s");
+    elseif minutes > 0 then
+        time_message = string.format("%d minute%s", minutes, minutes == 1 and "" or "s");
+    else
+        time_message = string.format("%d second%s", seconds, seconds == 1 and "" or "s");
+    end
+    
+    local warning_message = string.format(
+        "⚠️ This meeting will automatically end in %s due to no moderator being present. " ..
+        "A moderator can join to prevent this from happening.",
+        time_message
+    );
+    
+    system_chat.send_to_all(room, warning_message, "System");
 
     local function try_destroy()
         local now = socket.gettime();
@@ -113,6 +137,10 @@ local function schedule_room_destruction(room)
 
         if has_non_admin_owner(target_room) then
             target_room._data.meeting_host_destroy_at = nil;
+            -- Notify participants that destruction was cancelled due to moderator presence
+            system_chat.send_to_all(target_room, 
+                "✅ A moderator is present. The automatic meeting end has been cancelled.",
+                "System");
             return;
         end
 
@@ -145,6 +173,10 @@ module:hook('muc-occupant-joined', function (event)
         if room._data.meeting_host_destroy_at then
             room._data.meeting_host_destroy_at = nil;
             module:log('info', 'Cancelled scheduled room destruction for %s (participant joined)', room.jid);
+
+            system_chat.send_to_all(room, 
+                "✅ A moderator has joined the meeting. The automatic meeting end has been cancelled.",
+                "System");
         end
     end
 end, 2); -- run before av moderation, filesharing, breakout and polls
@@ -157,10 +189,12 @@ module:hook('muc-occupant-pre-join', function (event)
         return;
     end
 
-    -- Only enforce on room creation attempts (first join)
-    if room:has_occupant() then
-        module:log('info', 'Room %s already has occupants, skipping subscription check', room.jid);
-        return;
+    -- Are we the first non-system occupant? (room creation)
+    for _, o in room:each_occupant() do
+        if o ~= occupant and not is_admin(o.bare_jid) and not is_focus_occupant(o) then
+            module:log('info', 'Room %s already has occupants, skipping subscription check', room.jid);
+            return;
+        end
     end
 
     -- Subscription check (active or trialing)
