@@ -52,8 +52,6 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
 
         "muc_lobby_rooms";
         "muc_breakout_rooms";
-
-        "subscription_check";
     }
 
     main_muc = "conference.{{ .Env.XMPP_DOMAIN }}"
@@ -108,8 +106,6 @@ Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
         "polls";
         "muc_domain_mapper";
         "muc_password_whitelist";
-
-        "token_verification";
         "muc_hide_all";
         "muc_rate_limit";
         "muc_max_occupants";
