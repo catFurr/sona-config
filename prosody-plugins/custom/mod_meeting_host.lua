@@ -29,7 +29,7 @@ local is_healthcheck_room = util.is_healthcheck_room;
 local get_room_from_jid = util.get_room_from_jid;
 local ends_with = util.ends_with;
 
-local system_chat = module:require 'custom/mod_system_chat';
+local system_chat = module:require 'mod_system_chat';
 
 local muc_domain_base = module:get_option_string('muc_mapper_domain_base');
 local destroy_delay_seconds = module:get_option_number('meeting_host_destroy_delay', 120);
@@ -182,7 +182,7 @@ module:hook('muc-occupant-joined', function (event)
 end, 2); -- run before av moderation, filesharing, breakout and polls
 
 -- Gate room creation with subscription check only
-module:hook('muc-occupant-pre-join', function (event)
+module:hook('post-jitsi-authentication', function (event)
     local room, occupant, session, stanza, origin = event.room, event.occupant, event.origin, event.stanza, event.origin;
 
     if is_healthcheck_room(room.jid) or is_admin(occupant.bare_jid) or is_focus_occupant(occupant) then
@@ -205,14 +205,12 @@ module:hook('muc-occupant-pre-join', function (event)
                ctx_user and ctx_user.id or 'nil', sub_status or 'nil');
 
     if not (sub_status == 'active' or sub_status == 'trialing') then
-        local reply = st.error_reply(stanza, 'auth', 'forbidden', 'subscription-required');
-        origin.send(reply:tag('x', { xmlns = 'http://jabber.org/protocol/muc' }));
-        return true;
+        return false, 'subscription-required';
     end
 
     -- Mark creator for tracing
     room._data.meeting_host_first_bare_jid = room._data.meeting_host_first_bare_jid or occupant.bare_jid;
-end, 20);  -- run after token verification but before max occupants and rate limit
+end);
 
 module:hook('muc-occupant-left', function (event)
     local room, leaving_occupant = event.room, event.occupant;
