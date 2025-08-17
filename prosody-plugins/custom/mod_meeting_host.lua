@@ -46,18 +46,10 @@ local function is_subbed_user(session)
     return false;
 end
 
-local function is_host(room, occupant)
-    local aff = room:get_affiliation(occupant.bare_jid);
-    if aff == 'owner' then
-        return true;
-    end
-    return false;
-end
-
 local function has_host(room)
     for _, o in room:each_occupant() do
         local aff = room:get_affiliation(o.bare_jid);
-        if aff == 'owner' then
+        if aff == 'owner' and not is_admin(o.bare_jid) then
             return true;
         end
     end
@@ -65,9 +57,20 @@ local function has_host(room)
 end
 
 local function find_host_candidate(room)
-    for _, o in room:each_occupant() do
-        -- how do we check their auth context ?
-        -- TODO
+    for _, occupant in room:each_occupant() do
+        local bare_jid = occupant.bare_jid;
+        local domain = jid.host(bare_jid);
+
+        local user_sessions = prosody.hosts[domain] and prosody.hosts[domain].sessions;
+        local user_session = user_sessions and user_sessions[jid.bare(bare_jid)];
+
+        if user_session then
+            for resource, session in pairs(user_session.sessions) do
+                if is_subbed_user(session) then
+                    return occupant;
+                end
+            end
+        end
     end
     return nil;
 end
@@ -127,7 +130,7 @@ local function schedule_room_destruction(room)
             return;
         end
 
-        if has_non_admin_owner(target_room) then
+        if has_host(target_room) then
             target_room._data.meeting_host_destroy_at = nil;
             -- Notify participants that destruction was cancelled due to moderator presence
             system_chat.send_to_all(target_room, 
@@ -137,7 +140,7 @@ local function schedule_room_destruction(room)
         end
 
         module:log('info', 'Destroying room %s due to no moderator present', target_room_jid);
-        prosody.events.fire_event('maybe-destroy-room', {
+        module:fire_event('maybe-destroy-room', {
             room = target_room;
             reason = 'no-moderator-present';
             caller = module:get_name();
@@ -157,29 +160,16 @@ module:hook('muc-occupant-pre-join', function (event)
         return;
     end
 
-    local still_in_room = false
-    for _, o in room:each_occupant() do
-        -- how do we check their auth context ?
-        -- TODO
-        if o == occupant then
-            still_in_room = true
-        end
-    end
-
-    if still_in_room then
-        module:log('info', 'pre-join occupant %s already in room!', occupant.bare_jid);
-    end
-
     -- Are we the first non-system occupant? (room creation)
     for _, o in room:each_occupant() do
-        if o ~= occupant and not is_admin(o.bare_jid) then
+        if not is_admin(o.bare_jid) then
             module:log('info', 'Room %s already has occupants, skipping subscription check', room.jid);
             return;
         end
     end
 
     -- Subscription check (active or trialing)
-    if is_subbed_user(session) then
+    if not is_subbed_user(session) then
         session.send(st.error_reply(
                 stanza,
                 'cancel',
@@ -221,34 +211,9 @@ module:hook('muc-occupant-left', function (event)
         return;
     end
 
-    if is_host(room, occupant) then
-        -- this shouldnt be true, since we left the room right?
-        -- or wait, its affiliation so it might be true
-        module:log('info', 'Left user %s is owner', occupant.bare_jid);
+    if not is_subbed_user(session) or has_host(room) then
+        return;
     end
-
-    if has_host(room) then
-        module:log('info', 'Left room %s has host', room.jid);
-    end
-
-    if is_subbed_user(session) then
-        module:log('info', 'Left user %s is subbed', occupant.bare_jid);
-    end
-
-    local still_in_room = false
-    for _, o in room:each_occupant() do
-        -- how do we check their auth context ?
-        -- TODO
-        if o == occupant then
-            still_in_room = true
-        end
-    end
-
-    if still_in_room then
-        module:log('info', 'Left occupant %s is still in room!', occupant.bare_jid);
-    end
-
-    return;
 
     -- No other owners; try to promote a subbed user, otherwise schedule destruction
     local candidate = find_host_candidate(room);
