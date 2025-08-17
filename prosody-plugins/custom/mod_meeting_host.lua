@@ -35,72 +35,41 @@ local destroy_delay_seconds = module:get_option_number('meeting_host_destroy_del
 
 
 -- Helpers
-local function check_subscription_and_reject_if_invalid(origin, stanza, session, action_label)
-    -- Get context user from session or origin
-    local ctx_user = (session and session.jitsi_meet_context_user) or (origin and origin.jitsi_meet_context_user);
+local function is_subbed_user(session)
+    -- Get user context from session
+    local ctx_user = session and session.jitsi_meet_context_user;
     local sub_status = ctx_user and ctx_user.subscription_status;
 
-    module:log('info', 'Checking subscription for %s: user=%s, sub_status=%s',
-        action_label or 'action', ctx_user and ctx_user.id or 'nil', sub_status or 'nil');
-
-    if not (sub_status == 'active' or sub_status == 'trialing') then
-        module:log('info', 'invalid subscription status!');
-        if origin and stanza then
-            origin.send(st.error_reply(
-                stanza,
-                'cancel',
-                'not-allowed',
-                'Subscription required to create or start this meeting'
-            ));
-        end
-        return true; -- Subscription check failed, block the action
-    end
-
-    return false; -- Subscription check passed, allow the action
-end
-
-local function is_focus_occupant(occupant)
-    return occupant and occupant.nick and ends_with(occupant.nick, '/focus');
-end
-
-local function occupant_is_logged_in(occupant, session)
-    -- Treat JWT-auth and local auth users as logged in; fallback to domain check
-    if session and (session.auth_token or session.username) then
+    if sub_status == 'active' or sub_status == 'trialing' then
         return true;
     end
-    if occupant and occupant.bare_jid and muc_domain_base then
-        return jid_host(occupant.bare_jid) == muc_domain_base;
+    return false;
+end
+
+local function is_host(room, occupant)
+    local aff = room:get_affiliation(occupant.bare_jid);
+    if aff == 'owner' then
+        return true;
     end
     return false;
 end
 
-local function has_non_admin_owner(room)
+local function has_host(room)
     for _, o in room:each_occupant() do
-        if not is_admin(o.bare_jid) and not is_focus_occupant(o) then
-            local aff = room:get_affiliation(o.bare_jid);
-            if aff == 'owner' then
-                return true;
-            end
+        local aff = room:get_affiliation(o.bare_jid);
+        if aff == 'owner' then
+            return true;
         end
     end
     return false;
 end
 
-local function find_logged_in_candidate(room)
+local function find_host_candidate(room)
     for _, o in room:each_occupant() do
-        if not is_admin(o.bare_jid) and not is_focus_occupant(o) then
-            if occupant_is_logged_in(o) then
-                return o;
-            end
-        end
+        -- how do we check their auth context ?
+        -- TODO
     end
     return nil;
-end
-
-local function promote_owner(room, occupant)
-    if occupant and occupant.bare_jid then
-        room:set_affiliation(true, occupant.bare_jid, 'owner');
-    end
 end
 
 local function schedule_room_destruction(room)
@@ -180,56 +149,58 @@ local function schedule_room_destruction(room)
     module:add_timer(destroy_delay_seconds, try_destroy);
 end
 
--- Also guard room creation attempts before occupants join, similar to token_verification
-module:hook('muc-room-pre-create', function (event)
-    local origin, stanza = event.origin, event.stanza;
-
-    -- Allow admins through
-    if stanza and stanza.attr and stanza.attr.from and is_admin(stanza.attr.from) then
-        return;
-    end
-
-    -- Block if subscription check fails
-    if check_subscription_and_reject_if_invalid(origin, stanza, origin, 'room creation') then
-        return true;
-    end
-end, 99);
-
 -- Events
 module:hook('muc-occupant-pre-join', function (event)
-    local room, occupant, session, stanza, origin = event.room, event.occupant, event.origin, event.stanza, event.origin;
+    local room, occupant, session, stanza = event.room, event.occupant, event.origin, event.stanza;
 
-    if is_admin(occupant.bare_jid) or is_focus_occupant(occupant) then
+    if is_admin(occupant.bare_jid) then
         return;
+    end
+
+    local still_in_room = false
+    for _, o in room:each_occupant() do
+        -- how do we check their auth context ?
+        -- TODO
+        if o == occupant then
+            still_in_room = true
+        end
+    end
+
+    if still_in_room then
+        module:log('info', 'pre-join occupant %s already in room!', occupant.bare_jid);
     end
 
     -- Are we the first non-system occupant? (room creation)
     for _, o in room:each_occupant() do
-        if o ~= occupant and not is_admin(o.bare_jid) and not is_focus_occupant(o) then
+        if o ~= occupant and not is_admin(o.bare_jid) then
             module:log('info', 'Room %s already has occupants, skipping subscription check', room.jid);
             return;
         end
     end
 
-    -- Subscription check (active or trialing) for the first non-system occupant
-    if check_subscription_and_reject_if_invalid(origin, stanza, session, 'occupant pre-join') then
+    -- Subscription check (active or trialing)
+    if is_subbed_user(session) then
+        session.send(st.error_reply(
+                stanza,
+                'cancel',
+                'not-allowed',
+                'no active subscription found'
+            ));
         return true;
     end
 
-    -- Mark creator for tracing
-    room._data.meeting_host_first_bare_jid = room._data.meeting_host_first_bare_jid or occupant.bare_jid;
 end, 99); -- before anything else
 
 module:hook('muc-occupant-joined', function (event)
     local room, occupant, session = event.room, event.occupant, event.origin;
 
-    if is_healthcheck_room(room.jid) or is_admin(occupant.bare_jid) or is_focus_occupant(occupant) then
+    if is_healthcheck_room(room.jid) or is_admin(occupant.bare_jid) then
         return;
     end
 
-    -- If there is no non-admin owner and the joiner is logged in, promote them
-    if not has_non_admin_owner(room) and occupant_is_logged_in(occupant, session) then
-        promote_owner(room, occupant);
+    -- If there is no host and we are subbed user, promote user
+    if not has_host(room) and is_subbed_user(session) then
+        room:set_affiliation(true, occupant.bare_jid, 'owner');
 
         -- Cancel any scheduled destruction on join
         if room._data.meeting_host_destroy_at then
@@ -244,33 +215,46 @@ module:hook('muc-occupant-joined', function (event)
 end, 2); -- run before av moderation, filesharing, breakout and polls
 
 module:hook('muc-occupant-left', function (event)
-    local room, leaving_occupant = event.room, event.occupant;
+    local room, occupant, session = event.room, event.occupant, event.origin;
 
-    if is_healthcheck_room(room.jid) then
+    if is_healthcheck_room(room.jid) or is_admin(occupant.bare_jid) then
         return;
     end
 
-    -- Compute if any other non-admin owner will remain after this occupant leaves
-    local another_owner_exists = false;
+    if is_host(room, occupant) then
+        -- this shouldnt be true, since we left the room right?
+        -- or wait, its affiliation so it might be true
+        module:log('info', 'Left user %s is owner', occupant.bare_jid);
+    end
+
+    if has_host(room) then
+        module:log('info', 'Left room %s has host', room.jid);
+    end
+
+    if is_subbed_user(session) then
+        module:log('info', 'Left user %s is subbed', occupant.bare_jid);
+    end
+
+    local still_in_room = false
     for _, o in room:each_occupant() do
-        if o ~= leaving_occupant and not is_admin(o.bare_jid) and not is_focus_occupant(o) then
-            local aff = room:get_affiliation(o.bare_jid);
-            if aff == 'owner' then
-                another_owner_exists = true;
-                break;
-            end
+        -- how do we check their auth context ?
+        -- TODO
+        if o == occupant then
+            still_in_room = true
         end
     end
 
-    if another_owner_exists then
-        return;
+    if still_in_room then
+        module:log('info', 'Left occupant %s is still in room!', occupant.bare_jid);
     end
 
-    -- No other owners; try to promote a logged-in user, otherwise schedule destruction
-    local candidate = find_logged_in_candidate(room);
+    return;
+
+    -- No other owners; try to promote a subbed user, otherwise schedule destruction
+    local candidate = find_host_candidate(room);
     if candidate then
-        module:log('debug', 'Promoting logged-in participant %s to owner in %s', candidate.bare_jid or 'unknown', room.jid);
-        promote_owner(room, candidate);
+        module:log('debug', 'Promoting subbed participant %s to owner in %s', candidate.bare_jid or 'unknown', room.jid);
+        room:set_affiliation(true, candidate.bare_jid, 'owner');
         return;
     end
 
