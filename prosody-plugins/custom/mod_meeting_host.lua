@@ -151,55 +151,6 @@ local function schedule_room_destruction(room)
 end
 
 -- Events
-module:hook('muc-room-pre-create', function (event)
-    local session, stanza = event.origin, event.stanza;
-
-    local user_jid = stanza.attr.from;
-    if is_admin(user_jid) then
-        return;
-    end
-
-    -- Subscription check (active or trialing)
-    if not is_subbed_user(session) then
-        session.send(st.error_reply(
-                stanza,
-                'cancel',
-                'not-allowed',
-                'no active subscription found'
-            ));
-        return true;
-    end
-
-end, 99); -- before anything else
-
-module:hook('muc-occupant-pre-join', function (event)
-    local room, occupant, session, stanza = event.room, event.occupant, event.origin, event.stanza;
-
-    if is_admin(occupant.bare_jid) then
-        return;
-    end
-
-    -- Are we the first non-system occupant? (room creation)
-    for _, o in room:each_occupant() do
-        if not is_admin(o.bare_jid) then
-            -- module:log('debug', 'Room %s already has occupants, skipping subscription check', room.jid);
-            return;
-        end
-    end
-
-    -- Subscription check (active or trialing)
-    if not is_subbed_user(session) then
-        session.send(st.error_reply(
-                stanza,
-                'cancel',
-                'not-allowed',
-                'no active subscription found'
-            ));
-        return true;
-    end
-
-end, 99); -- before anything else
-
 module:hook('muc-occupant-joined', function (event)
     local room, occupant, session = event.room, event.occupant, event.origin;
 

@@ -14,6 +14,7 @@ services:
       # Override the default plugins with our own
       - ../prosody-plugins/token/util.lib.lua:/prosody-plugins/token/util.lib.lua:ro
       - ../prosody-plugins/luajwtjitsi.lib.lua:/prosody-plugins/luajwtjitsi.lib.lua:ro
+      - ../prosody-plugins/mod_reservations.lua:/prosody-plugins/mod_reservations.lua:ro
       - ../prosody-plugins/custom:/prosody-plugins-custom:ro
       - prosody-data:/config/data
       - ./certs:/config/certs
