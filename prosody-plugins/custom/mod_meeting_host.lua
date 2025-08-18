@@ -18,7 +18,6 @@ Configuration:
 ]]
 
 local jid = require 'util.jid';
-local jid_host = jid.host;
 local socket = require 'socket';
 local st = require 'util.stanza';
 
@@ -26,11 +25,9 @@ local util = module:require 'util';
 local is_admin = util.is_admin;
 local is_healthcheck_room = util.is_healthcheck_room;
 local get_room_from_jid = util.get_room_from_jid;
-local ends_with = util.ends_with;
 
 local system_chat = module:require 'mod_system_chat';
 
-local muc_domain_base = module:get_option_string('muc_mapper_domain_base');
 local destroy_delay_seconds = module:get_option_number('meeting_host_destroy_delay', 120);
 
 
@@ -60,9 +57,10 @@ local function find_host_candidate(room)
     for _, occupant in room:each_occupant() do
         local bare_jid = occupant.bare_jid;
         local domain = jid.host(bare_jid);
+        local username = jid.node(bare_jid);
 
         local user_sessions = prosody.hosts[domain] and prosody.hosts[domain].sessions;
-        local user_session = user_sessions and user_sessions[jid.bare(bare_jid)];
+        local user_session = user_sessions and user_sessions[username];
 
         if user_session then
             for resource, session in pairs(user_session.sessions) do
@@ -153,6 +151,27 @@ local function schedule_room_destruction(room)
 end
 
 -- Events
+module:hook('muc-room-pre-create', function (event)
+    local session, stanza = event.origin, event.stanza;
+
+    local user_jid = stanza.attr.from;
+    if is_admin(user_jid) then
+        return;
+    end
+
+    -- Subscription check (active or trialing)
+    if not is_subbed_user(session) then
+        session.send(st.error_reply(
+                stanza,
+                'cancel',
+                'not-allowed',
+                'no active subscription found'
+            ));
+        return true;
+    end
+
+end, 99); -- before anything else
+
 module:hook('muc-occupant-pre-join', function (event)
     local room, occupant, session, stanza = event.room, event.occupant, event.origin, event.stanza;
 
@@ -163,7 +182,7 @@ module:hook('muc-occupant-pre-join', function (event)
     -- Are we the first non-system occupant? (room creation)
     for _, o in room:each_occupant() do
         if not is_admin(o.bare_jid) then
-            module:log('info', 'Room %s already has occupants, skipping subscription check', room.jid);
+            -- module:log('debug', 'Room %s already has occupants, skipping subscription check', room.jid);
             return;
         end
     end
