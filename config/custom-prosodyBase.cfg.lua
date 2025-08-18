@@ -18,14 +18,14 @@ modules_enabled = {
 	-- Not essential, but recommended
 	"private"; -- Private XML storage (for room bookmarks, etc.)
 	"limits"; -- Enable bandwidth limiting for XMPP connections
-	"blocklist"; -- Allow users to block communications with other users
-	"bookmarks"; -- Synchronise the list of open rooms between clients
-	"carbons"; -- Keep multiple online clients in sync
-	"dialback"; -- Support for verifying remote servers using DNS
-	"smacks"; -- Stream management and resumption (XEP-0198)
-	"vcard4"; -- User profiles (stored in PEP)
-	"vcard_legacy"; -- Conversion between legacy vCard and PEP Avatar, vcard
-	"pep"; -- Allow users to store public and private data in their account
+	-- "blocklist"; -- Allow users to block communications with other users
+	-- "bookmarks"; -- Synchronise the list of open rooms between clients
+	-- "carbons"; -- Keep multiple online clients in sync
+	-- "dialback"; -- Support for verifying remote servers using DNS
+	-- "smacks"; -- Stream management and resumption (XEP-0198)
+	-- "vcard4"; -- User profiles (stored in PEP)
+	-- "vcard_legacy"; -- Conversion between legacy vCard and PEP Avatar, vcard
+	-- "pep"; -- Allow users to store public and private data in their account
 	-- These are commented by default as they have a performance impact
 	-- "privacy"; -- Support privacy lists
 	-- "compression"; -- Stream compression (Debian: requires lua-zlib module to work)
@@ -38,15 +38,15 @@ modules_enabled = {
 	-- Nice to have
 	"version"; -- Replies to server version requests
 	"ping"; -- Replies to XMPP pings with pongs
-	"time"; -- Let others know the time here on this server
-	"uptime"; -- Report how long server has been running
+	-- "time"; -- Let others know the time here on this server
+	-- "uptime"; -- Report how long server has been running
 	"csi_simple"; -- Simple but effective traffic optimizations for mobile devices
 
 	-- HTTP modules
-	"bosh"; -- Enable BOSH clients, aka "Jabber over HTTP"
+	-- "bosh"; -- Enable BOSH clients, aka "Jabber over HTTP"
 	-- "http_files"; -- Serve static files from a directory over HTTP
 	"http_openmetrics"; -- Export OpenMetrics-compatible monitoring data
-	"websocket"; -- XMPP over WebSockets
+	-- "websocket"; -- XMPP over WebSockets
 
 	-- Other specific functionality
 	"posix"; -- POSIX functionality, sends server to background, enables syslog, etc.
@@ -57,6 +57,9 @@ modules_enabled = {
 	-- "motd"; -- Send a message to users when they log in
 	-- "legacyauth"; -- Legacy authentication. Only used by some old clients and bots.
 	"http_health";
+
+	"external_services"; -- Handles client requests for STUN/TURN
+	"cf_turncredentials"; -- Support CF TURN/STUN
 };
 
 -- These modules are auto-loaded, but should you want
@@ -167,6 +170,10 @@ statistics_interval = "manual"  -- Single scraper, use manual for optimal perfor
 openmetrics_allow_cidr = "{{ .Env.PROSODY_TRUSTED_PROXIES_CIDR }}"  -- Allow Docker proxy network
 
 certificates = "/config/certs"
+
+-- Cloudflare TURN configuration
+cf_turn_app_id = "{{ .Env.CF_TURN_APP_ID }}"
+cf_turn_app_secret = "{{ .Env.CF_TURN_APP_SECRET }}"
 
 -- Enable use of native prosody 0.11 support for epoll over select
 network_backend = "epoll";

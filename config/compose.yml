@@ -12,9 +12,9 @@ services:
       start_period: 10s
     volumes:
       # Override the default plugins with our own
-      - ../prosody-plugins/token/util.lib.lua:/prosody-plugins/token/util.lib.lua
-      - ../prosody-plugins/luajwtjitsi.lib.lua:/prosody-plugins/luajwtjitsi.lib.lua
-      - ../prosody-plugins/custom:/prosody-plugins-custom
+      - ../prosody-plugins/token/util.lib.lua:/prosody-plugins/token/util.lib.lua:ro
+      - ../prosody-plugins/luajwtjitsi.lib.lua:/prosody-plugins/luajwtjitsi.lib.lua:ro
+      - ../prosody-plugins/custom:/prosody-plugins-custom:ro
       - prosody-data:/config/data
       - ./certs:/config/certs
       - ./custom-prosodyBase.cfg.lua:/defaults/prosody.cfg.lua:ro
