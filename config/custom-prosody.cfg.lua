@@ -54,6 +54,7 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
         "muc_breakout_rooms";
 
         "reservations";
+        "persistent_lobby";
     }
 
     main_muc = "conference.{{ .Env.XMPP_DOMAIN }}"
@@ -113,7 +114,8 @@ Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
         "muc_rate_limit";
         "muc_max_occupants";
 
-        "meeting_host";
+        -- "meeting_host";
+        "muc_wait_for_host";
     }
     admins = { "focus@auth.{{ .Env.XMPP_DOMAIN }}" }
     -- The size of the cache that saves state for IP addresses
@@ -130,6 +132,7 @@ Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
         "focus@auth.{{ .Env.XMPP_DOMAIN }}";
     }
     muc_max_occupants = 100
+    wait_for_host_disable_auto_owners = true
     meeting_host_destroy_delay = 300
 
 VirtualHost "recorder.{{ .Env.XMPP_DOMAIN }}"
