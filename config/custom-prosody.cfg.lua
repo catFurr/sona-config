@@ -53,7 +53,7 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
         "muc_lobby_rooms";
         "muc_breakout_rooms";
 
-        "reservations";
+        -- "reservations";
         "persistent_lobby";
     }
 
@@ -115,7 +115,6 @@ Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
         "muc_max_occupants";
 
         "meeting_host";
-        -- "muc_wait_for_host";
     }
     admins = { "focus@auth.{{ .Env.XMPP_DOMAIN }}" }
     -- The size of the cache that saves state for IP addresses

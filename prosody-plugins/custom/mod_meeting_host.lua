@@ -20,10 +20,10 @@ Component "conference.${XMPP_DOMAIN}" "muc"
     meeting_host_destroy_delay = 120
 ]]
 
-local jid = require 'util.jid';
 local socket = require 'socket';
-local st = require 'util.stanza';
+local timer = require 'util.timer';
 
+local async_check_host = module:require 'mod_host_check';
 local system_chat = module:require 'mod_system_chat';
 local util = module:require "util";
 local is_admin = util.is_admin;
@@ -43,17 +43,6 @@ local lobby_host;
 
 
 -- Helpers
-local function is_subbed_user(session)
-    -- Get user context from session
-    local ctx_user = session and session.jitsi_meet_context_user;
-    local sub_status = ctx_user and ctx_user.subscription_status;
-
-    if sub_status == 'active' or sub_status == 'trialing' then
-        return true;
-    end
-    return false;
-end
-
 local function has_host(room)
     for _, o in room:each_occupant() do
         local aff = room:get_affiliation(o.bare_jid);
@@ -64,60 +53,46 @@ local function has_host(room)
     return false;
 end
 
-local function find_host_candidate(room)
-    for _, occupant in room:each_occupant() do
-        local bare_jid = occupant.bare_jid;
-        local domain = jid.host(bare_jid);
-        local username = jid.node(bare_jid);
-
-        local user_sessions = prosody.hosts[domain] and prosody.hosts[domain].sessions;
-        local user_session = user_sessions and user_sessions[username];
-
-        if user_session then
-            for resource, session in pairs(user_session.sessions) do
-                if is_subbed_user(session) then
-                    return occupant;
-                end
-            end
+local function has_non_system_occupant(room)
+    for _, o in room:each_occupant() do
+        if not is_admin(o.bare_jid) then
+            return true;
         end
     end
-    return nil;
+    return false;
 end
 
 local function schedule_room_destruction(room)
-    if not room then return end
-    if is_healthcheck_room(room.jid) then return end
+    if not room or is_healthcheck_room(room.jid) then return end
 
     -- If a destruction is already scheduled, don't schedule another
-    if room._data.meeting_host_destroy_at then
-        return;
-    end
+    if room._data.meeting_host_destroy_at then return end
 
     room._data.meeting_host_destroy_at = socket.gettime() + destroy_delay_seconds;
     local target_room_jid = room.jid;
 
     module:log('info', 'Scheduling room destruction for %s in %ds', target_room_jid, destroy_delay_seconds);
-    
+
     -- Notify all participants that the meeting will end soon
     local minutes = math.floor(destroy_delay_seconds / 60);
     local seconds = destroy_delay_seconds % 60;
     local time_message;
     if minutes > 0 and seconds > 0 then
-        time_message = string.format("%d minute%s and %d second%s", 
-            minutes, minutes == 1 and "" or "s", 
+        time_message = string.format("%d minute%s and %d second%s",
+            minutes, minutes == 1 and "" or "s",
             seconds, seconds == 1 and "" or "s");
     elseif minutes > 0 then
         time_message = string.format("%d minute%s", minutes, minutes == 1 and "" or "s");
     else
         time_message = string.format("%d second%s", seconds, seconds == 1 and "" or "s");
     end
-    
+
     local warning_message = string.format(
-        "⚠️ This meeting will automatically end in %s due to no moderator being present. " ..
-        "A moderator can join to prevent this from happening.",
+        "⚠️ This meeting will end in %s due to no Host being present. " ..
+        "Host can join to prevent this from happening.",
         time_message
     );
-    
+
     system_chat.send_to_all(room, warning_message, "System");
 
     local function try_destroy()
@@ -135,111 +110,131 @@ local function schedule_room_destruction(room)
 
         if now < destroy_at then
             -- Too early; re-check shortly to be resilient to clock drift (1s)
-            module:add_timer(1, try_destroy);
-            return;
+            return 1;
         end
 
         if has_host(target_room) then
             target_room._data.meeting_host_destroy_at = nil;
             -- Notify participants that destruction was cancelled due to moderator presence
-            system_chat.send_to_all(target_room, 
-                "✅ A moderator is present. The automatic meeting end has been cancelled.",
+            system_chat.send_to_all(room,
+                "✅ The meeting has a new Host. The automatic room close has been cancelled.",
                 "System");
             return;
         end
 
-        module:log('info', 'Destroying room %s due to no moderator present', target_room_jid);
+        module:log('info', 'Destroying room %s due to no host present', target_room_jid);
         module:fire_event('maybe-destroy-room', {
-            room = target_room;
-            reason = 'no-moderator-present';
-            caller = module:get_name();
+            room = target_room,
+            reason = 'no-moderator-present',
+            caller = module:get_name(),
         });
         -- Clear the schedule regardless
         target_room._data.meeting_host_destroy_at = nil;
     end
 
-    module:add_timer(destroy_delay_seconds, try_destroy);
+    timer.add_task(destroy_delay_seconds, try_destroy);
+end
+
+local function host_check_success(event)
+    local room, occupant, session = event.room, event.occupant, event.session;
+    if not room._data or room._data.has_host then
+        return;
+    end
+
+    room._data.has_host = true;
+
+    room:set_affiliation(true, occupant.bare_jid, 'owner');
+    occupant.role = room:get_default_role(room:get_affiliation(occupant.bare_jid)) or 'moderator';
+
+    -- Send private message to the new host about whiteboard functionality
+    system_chat.send_to_participant(room,
+        "You are the meeting host. Please use excalidraw.com for whiteboard functionality.",
+        occupant.jid,
+        "System");
+
+    -- TODO
+    if has_non_system_occupant(room) then
+        -- HOST is in the room already
+        -- we should never get here if the host is not in this room (if user is in lobby dont consider in room)
+
+
+        -- We are in an existing meeting. don't change the lobby settings.
+
+        -- Cancel any scheduled destruction on join
+        if room._data.meeting_host_destroy_at then
+            room._data.meeting_host_destroy_at = nil;
+            module:log('info', 'Cancelled scheduled room destruction for %s (participant joined)', room.jid);
+
+            system_chat.send_to_all(room,
+                "✅ The meeting has a new Host. The automatic room close has been cancelled.",
+                "System");
+        end
+    elseif room:get_members_only() then
+        -- Empty room, let's bring everyone in and destroy the lobby
+        room:set_members_only(false);
+
+        -- the host is here, let's drop the lobby
+        module:fire_event('room_host_arrived', room.jid, session);
+        lobby_host:fire_event('destroy-lobby-room', {
+            room = room,
+            newjid = room.jid,
+            message = 'Host arrived.',
+        });
+    end
 end
 
 -- Events
+module:hook('muc-occupant-pre-join', function(event)
+    local room, occupant = event.room, event.occupant;
 
--- if not authenticated user is trying to join the room we enable lobby in it
--- and wait for the moderator to join
-module:hook('muc-occupant-pre-join', function (event)
-    local room, occupant, session = event.room, event.occupant, event.origin;
-
-    -- session._data.valid_room_host is set in mod_reservations
-
-    -- we ignore jicofo as we want it to join the room or if the room has already seen its
-    -- authenticated host
     if is_admin(occupant.bare_jid) or is_healthcheck_room(room.jid) or room._data.has_host then
         return;
     end
 
-    if (session._data.valid_room_host) then
-        room:set_affiliation(true, occupant.bare_jid, 'owner');
-        room._data.has_host = true;
+    -- FIXME: very unlikely race condition if callback executes before the following
+    -- create-persistent-lobby-room event runs
+    async_check_host(occupant, host_check_success)
 
-        -- Cancel any scheduled destruction on join
-        -- if room._data.meeting_host_destroy_at then
-        --     room._data.meeting_host_destroy_at = nil;
-        --     module:log('info', 'Cancelled scheduled room destruction for %s (participant joined)', room.jid);
-
-        --     system_chat.send_to_all(room, 
-        --         "✅ A moderator has joined the meeting. The automatic meeting end has been cancelled.",
-        --         "System");
-        -- end
-
-        if room:get_members_only() then
-            -- the host is here, let's drop the lobby
-            room:set_members_only(false);
-            lobby_host:fire_event('destroy-lobby-room', {
-                room = room,
-                newjid = room.jid,
-                message = 'Host arrived.',
-            });
-        end
-    end
-
+    -- since theres no host let's enable lobby
     if not room:get_members_only() then
-        -- let's enable lobby
         module:log('info', 'Will wait for host in %s.', room.jid);
         prosody.events.fire_event('create-persistent-lobby-room', {
-            room = room;
+            room = room,
             reason = 'waiting-for-host',
-            -- skip_display_name_check = true;
+            skip_display_name_check = true,
         });
     end
-
 end);
 
-process_host_module(lobby_muc_component_config, function(host_module, host)
-    -- lobby muc component created
-    module:log('info', 'Lobby component loaded %s', host);
-    lobby_host = module:context(host_module);
-end);
-
-module:hook('muc-occupant-left', function (event)
+module:hook('muc-occupant-left', function(event)
     local room, occupant, session = event.room, event.occupant, event.origin;
 
     if is_healthcheck_room(room.jid) or is_admin(occupant.bare_jid) then
         return;
     end
 
-    if not is_subbed_user(session) or has_host(room) or not room:has_occupant() then
+    if not session.is_valid_host or not has_non_system_occupant(room) or has_host(room) then
         return;
     end
 
-    -- No other owners; try to promote a subbed user, otherwise schedule destruction
-    -- FIXME run this async so we don't block this event
-    local candidate = find_host_candidate(room);
-    if candidate then
-        module:log('debug', 'Promoting subbed participant %s to owner in %s', candidate.bare_jid or 'unknown', room.jid);
-        room:set_affiliation(true, candidate.bare_jid, 'owner');
-        return;
+    room._data.has_host = false;
+
+    -- No other owners; try to promote, otherwise schedule destruction
+    for _, o in room:each_occupant() do
+        async_check_host(o, host_check_success)
     end
 
-    -- schedule_room_destruction(room);
+    -- if no host in 3 seconds, schedule room destruction
+    -- FIXME: possible race condition with the async calls above
+    timer.add_task(3, function()
+        if not has_host(room) then
+            schedule_room_destruction(room);
+        end
+    end);
 end, -1); -- after persistent_lobby
 
-
+process_host_module(lobby_muc_component_config, function(host_module, host)
+    -- lobby muc component created
+    module:log('info', 'Lobby component loaded %s', host);
+    lobby_host = module:context(host_module);
+end);
