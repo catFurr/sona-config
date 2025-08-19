@@ -3,32 +3,43 @@ Meeting Hosts for Sonacove MUC (Component module)
 
 Ensures first eligible (logged-in) creator becomes host, host handover on leave, and timed destruction if no host remains.
 
+-- This will prevent anyone joining the call till jicofo and one host join the room
+-- for the rest of the participants lobby will be turned on and they will be waiting there till
+-- the main participant joins and lobby will be turned off at that time and rest of the participants will
+-- join the room.
 - On join, if there is no host and the joining user is logged in, promote them to affiliation 'owner' (moderator role). Any scheduled destruction is canceled on join.
 - When the last non-admin owner leaves, promote any logged-in participant to owner. If no eligible participant exists, schedule room destruction after a configurable delay.
 
-Configuration:
-- meeting_host_destroy_delay (number, seconds): Delay before attempting to destroy a room with no host (default: 120).
-- Module should be enabled under the conference MUC component:
-  Component "conference.${XMPP_DOMAIN}" "muc"
-      modules_enabled = {
-          ...
-          "meeting_host";
-      }
+-- This module depends on mod_persistent_lobby.
 
+Component "conference.${XMPP_DOMAIN}" "muc"
+    modules_enabled = {
+        ...
+        "meeting_host";
+    }
+    meeting_host_destroy_delay = 120
 ]]
 
 local jid = require 'util.jid';
 local socket = require 'socket';
 local st = require 'util.stanza';
 
-local util = module:require 'util';
+local system_chat = module:require 'mod_system_chat';
+local util = module:require "util";
 local is_admin = util.is_admin;
 local is_healthcheck_room = util.is_healthcheck_room;
 local get_room_from_jid = util.get_room_from_jid;
-
-local system_chat = module:require 'mod_system_chat';
+local process_host_module = util.process_host_module;
 
 local destroy_delay_seconds = module:get_option_number('meeting_host_destroy_delay', 120);
+local muc_domain_base = module:get_option_string('muc_mapper_domain_base');
+if not muc_domain_base then
+    module:log('warn', "No 'muc_mapper_domain_base' option set, disabling module");
+    return
+end
+
+local lobby_muc_component_config = 'lobby.' .. muc_domain_base;
+local lobby_host;
 
 
 -- Helpers
@@ -151,28 +162,62 @@ local function schedule_room_destruction(room)
 end
 
 -- Events
-module:hook('muc-occupant-joined', function (event)
+
+-- if not authenticated user is trying to join the room we enable lobby in it
+-- and wait for the moderator to join
+module:hook('muc-occupant-pre-join', function (event)
     local room, occupant, session = event.room, event.occupant, event.origin;
 
-    if is_healthcheck_room(room.jid) or is_admin(occupant.bare_jid) then
+    -- session._data.valid_room_host is set in mod_reservations
+
+    -- we ignore jicofo as we want it to join the room or if the room has already seen its
+    -- authenticated host
+    if is_admin(occupant.bare_jid) or is_healthcheck_room(room.jid) or room._data.has_host then
         return;
     end
 
-    -- If there is no host and we are subbed user, promote user
-    if not has_host(room) and is_subbed_user(session) then
+    if (session._data.valid_room_host) then
         room:set_affiliation(true, occupant.bare_jid, 'owner');
+        room._data.has_host = true;
 
         -- Cancel any scheduled destruction on join
-        if room._data.meeting_host_destroy_at then
-            room._data.meeting_host_destroy_at = nil;
-            module:log('info', 'Cancelled scheduled room destruction for %s (participant joined)', room.jid);
+        -- if room._data.meeting_host_destroy_at then
+        --     room._data.meeting_host_destroy_at = nil;
+        --     module:log('info', 'Cancelled scheduled room destruction for %s (participant joined)', room.jid);
 
-            system_chat.send_to_all(room, 
-                "✅ A moderator has joined the meeting. The automatic meeting end has been cancelled.",
-                "System");
+        --     system_chat.send_to_all(room, 
+        --         "✅ A moderator has joined the meeting. The automatic meeting end has been cancelled.",
+        --         "System");
+        -- end
+
+        if room:get_members_only() then
+            -- the host is here, let's drop the lobby
+            room:set_members_only(false);
+            lobby_host:fire_event('destroy-lobby-room', {
+                room = room,
+                newjid = room.jid,
+                message = 'Host arrived.',
+            });
         end
     end
-end, 2); -- run before av moderation, filesharing, breakout and polls
+
+    if not room:get_members_only() then
+        -- let's enable lobby
+        module:log('info', 'Will wait for host in %s.', room.jid);
+        prosody.events.fire_event('create-persistent-lobby-room', {
+            room = room;
+            reason = 'waiting-for-host',
+            -- skip_display_name_check = true;
+        });
+    end
+
+end);
+
+process_host_module(lobby_muc_component_config, function(host_module, host)
+    -- lobby muc component created
+    module:log('info', 'Lobby component loaded %s', host);
+    lobby_host = module:context(host_module);
+end);
 
 module:hook('muc-occupant-left', function (event)
     local room, occupant, session = event.room, event.occupant, event.origin;
@@ -181,11 +226,12 @@ module:hook('muc-occupant-left', function (event)
         return;
     end
 
-    if not is_subbed_user(session) or has_host(room) then
+    if not is_subbed_user(session) or has_host(room) or not room:has_occupant() then
         return;
     end
 
     -- No other owners; try to promote a subbed user, otherwise schedule destruction
+    -- FIXME run this async so we don't block this event
     local candidate = find_host_candidate(room);
     if candidate then
         module:log('debug', 'Promoting subbed participant %s to owner in %s', candidate.bare_jid or 'unknown', room.jid);
@@ -194,6 +240,6 @@ module:hook('muc-occupant-left', function (event)
     end
 
     -- schedule_room_destruction(room);
-end, -1); -- run after breakout rooms
+end, -1); -- after persistent_lobby
 
 
