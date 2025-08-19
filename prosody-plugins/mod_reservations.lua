@@ -603,6 +603,8 @@ module:hook("pre-iq/host", function(event)
         return; -- not Conference IQ. Ignore.
     end
 
+    session._data.valid_room_host = true;
+
     local room_jid = room_jid_match_rewrite(conference.attr.room);
 
     if get_room_from_jid(room_jid) ~= nil then
@@ -615,31 +617,6 @@ module:hook("pre-iq/host", function(event)
         if host == breakout_muc_component_host then
             module:log("debug", "Skip reservation check for breakout room %s", room_jid);
             return;
-        end
-    end
-
-    -- Subscription check
-    local user_jid = stanza.attr.from;
-    local id = stanza.attr.id;
-    if is_admin(user_jid) then
-        module:log("debug", "User %s is admin, skipping subscription check for room %s", user_jid, room_jid);
-    else
-        if not is_subbed_user(session) then
-            module:log('info', 'User %s is not subscribed, denying conference creation for room %s', user_jid, room_jid);
-            -- session.send(st.error_reply(
-            --         stanza,
-            --         'auth',
-            --         'not-authorized',
-            --         'no active subscription found'
-            --     ));
-            session.send(
-                st.iq({ type="error", to=user_jid, from=focus_component_host, id=id })
-                    :tag("error", { type="cancel" })
-                        :tag("service-unavailable", { xmlns="urn:ietf:params:xml:ns:xmpp-stanzas" }):up()
-                        :tag("text", { xmlns="urn:ietf:params:xml:ns:xmpp-stanzas" }):text("no active subscription found"):up()
-                        :tag("reservation-error", { xmlns="http://jitsi.org/protocol/focus", ["error-code"]=tostring(401) })
-            );
-            return true; -- Stop processing
         end
     end
 
