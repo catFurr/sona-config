@@ -11,66 +11,37 @@ directly in the Prosody configuration.
 ```lua
 local system_chat = module:require "custom/mod_system_chat";
 
--- Send message to all participants in a room (group chat):
-system_chat.send_to_all(room, message, displayName)
+-- Send message to all participants in a room (group chat)
+system_chat.send_to_all(room, message, "System");
 
--- Send private message to specific participants:
-system_chat.send_to_participants(room, message, occupantJIDs, displayName)
+-- Send private message to specific participants
+system_chat.send_to_participants(room, message, occupant.nick, "System");
 
--- Send private message to a single participant:
-system_chat.send_to_participant(room, message, occupantJID, displayName)
-```
-
-## Parameters
-
-- `room`: The MUC room object
-- `message`: The text message to send (string)
-- `displayName`: Optional display name for the system sender (string, defaults to "System")
-- `connectionJIDs`: Array of participant JIDs to send private messages to
-- `participantJID`: Single participant JID for private message
-
-## Message Format
-
-Messages are sent as JSON-message stanzas with the following structure:
-```json
-{
-  "displayName": "System",
-  "type": "system_chat_message",
-  "message": "Your message here"
-}
+-- Send private message to a single participant
+system_chat.send_to_participant(room, message, [o1.nick, o2.nick], "System");
 ```
 --]]
 
 local st = require "util.stanza";
 local json = require "cjson.safe";
 
-local util = module:require "util";
-local is_admin = util.is_admin;
-local ends_with = util.ends_with;
-
 local SystemChat = {};
 
--- Local utility function to create JSON message stanza
-local function create_json_message_stanza(from, to, message_data, message_type)
-    local stanza = st.message({
-        from = from,
-        type = message_type
-    });
-
-    if to then
-        stanza.attr.to = to;
+function SystemChat.format_seconds(num_seconds)
+    local minutes = math.floor(num_seconds / 60);
+    local seconds = num_seconds % 60;
+    local time_message;
+    if minutes > 0 and seconds > 0 then
+        time_message = string.format("%d minute%s and %d second%s",
+            minutes, minutes == 1 and "" or "s",
+            seconds, seconds == 1 and "" or "s");
+    elseif minutes > 0 then
+        time_message = string.format("%d minute%s", minutes, minutes == 1 and "" or "s");
+    else
+        time_message = string.format("%d second%s", seconds, seconds == 1 and "" or "s");
     end
 
-    return stanza:tag('json-message', { xmlns = 'http://jitsi.org/jitmeet' })
-        :text(json.encode(message_data))
-        :up();
-end
-
--- Local utility function to check if occupant should receive messages
-local function should_message_occupant(occupant)
-    return occupant.bare_jid and
-        not is_admin(occupant.bare_jid) and
-        not (occupant.nick and ends_with(occupant.nick, '/focus'));
+    return time_message
 end
 
 ---
@@ -88,17 +59,16 @@ function SystemChat.send_to_all(room, message, displayName)
 
     displayName = displayName or "System";
 
-    local data = {
-        displayName = displayName,
-        type = "system_chat_message",
-        message = message,
-    };
+    -- Send as a regular group chat body message so it shows up as normal chat
+    local stanza = st.message({
+        from = room.jid,
+        type = "groupchat"
+    });
+    stanza:tag('nick', { xmlns = 'http://jabber.org/protocol/nick' }):text(displayName):up();
+    stanza:tag('body'):text(message):up();
 
-    local stanza = create_json_message_stanza(room.jid, nil, data, "groupchat");
+    module:log("debug", "Broadcasting group message (body) in room %s: %s", room.jid, message);
 
-    module:log("debug", "Sending system message to all participants in room %s: %s", room.jid, message);
-
-    -- Broadcast to all occupants
     room:broadcast_message(stanza);
 
     return true;
@@ -108,27 +78,34 @@ end
 -- Send a private system message to a single participant
 -- @param room The MUC room object
 -- @param message The message text to send
--- @param occupantJID The JID of the occupant to send to
+-- @param occupantNick The full MUC JID (room@muc/nick) of the occupant to send to (bare JID also accepted)
 -- @param displayName Optional display name (defaults to "System")
 -- @return boolean Success status
 --
-function SystemChat.send_to_participant(room, message, occupantJID, displayName)
-    if not room or not message or not occupantJID then
-        module:log("error", "Missing required parameters: room, message, and occupantJID");
+function SystemChat.send_to_participant(room, message, occupantNick, displayName)
+    if not room or not message or not occupantNick then
+        module:log("error", "Missing required parameters: room, message, and occupantNick");
         return false;
     end
 
     displayName = displayName or "System";
 
+    -- Use json-message for private so UI can show custom displayName and treat it as private
     local data = {
         displayName = displayName,
         type = "system_chat_message",
         message = message,
     };
 
-    local stanza = create_json_message_stanza(room.jid, occupantJID, data, "chat");
+    local stanza = st.message({
+        from = room.jid,
+        type = "chat"
+    });
+    stanza.attr.to = occupantNick;
+    stanza:tag('json-message', { xmlns = 'http://jitsi.org/jitmeet' }):text(json.encode(data)):up();
 
-    module:log("debug", "Sending private system message to %s in room %s: %s", occupantJID, room.jid, message);
+    module:log("debug", "Sending private system message to %s in room %s: %s", tostring(occupantNick),
+        room.jid, message);
 
     room:route_stanza(stanza);
     return true;
@@ -138,30 +115,25 @@ end
 -- Send a private system message to specific participants
 -- @param room The MUC room object
 -- @param message The message text to send
--- @param occupantJIDs Array of occupant JIDs to send to
+-- @param occupantNicks Array of participant full MUC JIDs (room@muc/nick) to send to (bare JIDs also accepted)
 -- @param displayName Optional display name (defaults to "System")
 -- @return boolean Success status
 --
-function SystemChat.send_to_participants(room, message, occupantJIDs, displayName)
-    if not room or not message or not occupantJIDs then
-        module:log("error", "Missing required parameters: room, message, and occupantJIDs");
+function SystemChat.send_to_participants(room, message, occupantNicks, displayName)
+    if not room or not message or not occupantNicks then
+        module:log("error", "Missing required parameters: room, message, and occupantNicks");
         return false;
     end
 
-    if type(occupantJIDs) ~= "table" then
-        module:log("error", "occupantJIDs must be an array/table");
+    if type(occupantNicks) ~= "table" then
+        module:log("error", "occupantNicks must be an array/table");
         return false;
     end
 
     local success_count = 0;
-
-    for _, to in ipairs(occupantJIDs) do
-        if to and to ~= "" then
-            if SystemChat.send_to_participant(room, message, to, displayName) then
-                success_count = success_count + 1;
-            end
-        else
-            module:log("warn", "Skipping empty or nil JID in occupantJIDs");
+    for _, to in ipairs(occupantNicks) do
+        if SystemChat.send_to_participant(room, message, to, displayName) then
+            success_count = success_count + 1;
         end
     end
 
