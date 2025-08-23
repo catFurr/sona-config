@@ -19,6 +19,8 @@ Component "conference.${XMPP_DOMAIN}" "muc"
     }
     meeting_host_destroy_delay = 120
 ]]
+-- local module = {}
+-- local prosody = {}
 
 local socket = require 'socket';
 local timer = require 'util.timer';
@@ -73,8 +75,8 @@ local function is_subbed_user(session)
     return false;
 end
 
--- callback expects arg: { room, occupant, session }
-local function async_check_host(occupant, room, callback)
+-- callback expects arg: { room, occupant, origin }
+local function check_valid_meeting_host(occupant, room, callback)
     -- occupant.sessions = table: 0x594eb79b0ce0
     -- occupant.bare_jid = df4b3628-e17e-4a15-9719-59811caec24e@guest.staj.sonacove.com
     -- occupant.nick = poo@conference.staj.sonacove.com/df4b3628
@@ -112,6 +114,7 @@ local function async_check_host(occupant, room, callback)
     local _user = prosody.bare_sessions[occupant.bare_jid];
     if _user and _user.sessions then
         for resource, _s in pairs(_user.sessions) do
+            -- TODO warn if more than one session found
             if _s then
                 session = _s;
                 break;
@@ -125,16 +128,13 @@ local function async_check_host(occupant, room, callback)
 
     -- Check if this session is already validated as a host
     if session.is_valid_host then
-        callback({ room = room, occupant = occupant, session = session });
+        callback({ room = room, occupant = occupant, origin = session });
         return;
     end
 
-    -- Call the http endpoint asynchronously
-    -- TODO: for now we simulate the call with a timer.
-    timer.add_task(1, function()
-        session.is_valid_host = true;
-        callback({ room = room, occupant = occupant, session = session });
-    end);
+    -- TODO Call the http endpoint
+    session.is_valid_host = true;
+    callback({ room = room, occupant = occupant, origin = session });
 end
 
 local function schedule_room_destruction(room)
@@ -163,23 +163,20 @@ local function schedule_room_destruction(room)
         local now = socket.gettime();
         local target_room = get_room_from_jid(target_room_jid);
 
-        if not target_room then
-            return;
-        end
+        if not target_room then return end
 
         local destroy_at = target_room._data and target_room._data.meeting_host_destroy_at;
-        if not destroy_at then
-            return; -- cancelled
-        end
+        if not destroy_at then return end -- cancelled
 
         if now < destroy_at then
             -- Too early; re-check shortly to be resilient to clock drift (1s)
             return 1;
         end
 
+        -- Clear the schedule regardless
+        target_room._data.meeting_host_destroy_at = nil;
+
         if has_host(target_room) then
-            target_room._data.meeting_host_destroy_at = nil;
-            -- Notify participants that destruction was cancelled due to moderator presence
             system_chat.send_to_all(room,
                 "✅ The meeting has a new Host. The automatic room close has been cancelled.",
                 "System");
@@ -189,18 +186,26 @@ local function schedule_room_destruction(room)
         module:log('info', 'Destroying room %s due to no host present', target_room_jid);
         prosody.events.fire_event('maybe-destroy-room', {
             room = target_room,
-            reason = 'no-moderator-present',
+            reason = 'The meeting has ended after the Host left.',
             caller = module:get_name(),
         });
-        -- Clear the schedule regardless
-        target_room._data.meeting_host_destroy_at = nil;
     end
 
     timer.add_task(destroy_delay_seconds, try_destroy);
 end
 
+
+-- TODO
+-- host rejoin does not promote them to host
+-- private message not sent to host
+-- chat message has `System (viewer)` which looks wierd. (change in lang)
+-- scheduled destruction doesnt end meeting cleanly
+-- isHost not working for self ✅
+-- conference does not end? (set room persistent to false) ✅
+
 local function host_check_success(event)
-    local room, occupant, session = event.room, event.occupant, event.session;
+    local room, occupant, session = event.room, event.occupant, event.origin;
+    if not room or not occupant or not session then return end
     if not room._data or room._data.has_host then return end
 
     room._data.has_host = true;
@@ -232,7 +237,7 @@ local function host_check_success(event)
     elseif room:get_members_only() then
         -- Empty room, let's bring everyone in and destroy the lobby
         room:set_members_only(false);
-        room._data.persist_lobby = false;
+        -- room._data.persist_lobby = false;
 
         -- the host is here, let's drop the lobby
         module:fire_event('room_host_arrived', room.jid, session);
@@ -241,43 +246,40 @@ local function host_check_success(event)
             newjid = room.jid,
             message = 'Host arrived.',
         });
+        -- room:set_persistent(true);
     end
 end
 
 -- Events
 module:hook('muc-occupant-pre-join', function(event)
     local room, occupant = event.room, event.occupant;
+    if not room or not occupant then return end
 
     if is_admin(occupant.bare_jid) or is_healthcheck_room(room.jid) or room._data.has_host then
         return;
     end
 
     -- once the meeting starts lets not manage the lobby anymore, avoids some edge cases
-    if has_non_system_occupant(room) then
-        return;
-    end
+    if has_non_system_occupant(room) then return end
 
     module:log('info', 'occ pre join; jid? %s', occupant.bare_jid);
-
-    -- FIXME: very unlikely race condition if callback executes before the following
-    -- create-persistent-lobby-room event runs
-    async_check_host(occupant, room, host_check_success)
-
+    check_valid_meeting_host(occupant, room, host_check_success)
     module:log('info', 'post fire check host');
 
     -- since theres no host let's enable lobby
-    if not room:get_members_only() then
+    if not room._data.has_host and not room:get_members_only() then
         module:log('info', 'Will wait for host in %s.', room.jid);
         prosody.events.fire_event('create-persistent-lobby-room', {
             room = room,
             reason = 'waiting-for-host',
-            skip_display_name_check = true,
+            skip_display_name_check = false,
         });
     end
 end);
 
 module:hook('muc-occupant-left', function(event)
     local room, occupant, session = event.room, event.occupant, event.origin;
+    if not room or not occupant or not session then return end
 
     if is_healthcheck_room(room.jid) or is_admin(occupant.bare_jid) then
         return;
@@ -292,9 +294,10 @@ module:hook('muc-occupant-left', function(event)
     room._data.has_host = false;
 
     -- No other owners; try to promote, otherwise schedule destruction
+    -- TODO call these async so they happen in parallel
     for _, o in room:each_occupant() do
         if o.role == 'moderator' then
-            async_check_host(o, room, host_check_success)
+            check_valid_meeting_host(o, room, host_check_success)
         end
     end
 

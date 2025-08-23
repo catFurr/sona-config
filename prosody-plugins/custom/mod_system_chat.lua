@@ -22,6 +22,9 @@ system_chat.send_to_participant(room, message, [o1.nick, o2.nick], "System");
 ```
 --]]
 
+-- local module = {}
+-- local prosody = {}
+
 local st = require "util.stanza";
 local json = require "cjson.safe";
 
@@ -45,36 +48,6 @@ function SystemChat.format_seconds(num_seconds)
 end
 
 ---
--- Send a system message to all participants in a room (group chat)
--- @param room The MUC room object
--- @param message The message text to send
--- @param displayName Optional display name (defaults to "System")
--- @return boolean Success status
---
-function SystemChat.send_to_all(room, message, displayName)
-    if not room or not message then
-        module:log("error", "Missing required parameters: room and message");
-        return false;
-    end
-
-    displayName = displayName or "System";
-
-    -- Send as a regular group chat body message so it shows up as normal chat
-    local stanza = st.message({
-        from = room.jid,
-        type = "groupchat"
-    });
-    stanza:tag('nick', { xmlns = 'http://jabber.org/protocol/nick' }):text(displayName):up();
-    stanza:tag('body'):text(message):up();
-
-    module:log("debug", "Broadcasting group message (body) in room %s: %s", room.jid, message);
-
-    room:broadcast_message(stanza);
-
-    return true;
-end
-
----
 -- Send a private system message to a single participant
 -- @param room The MUC room object
 -- @param message The message text to send
@@ -82,30 +55,21 @@ end
 -- @param displayName Optional display name (defaults to "System")
 -- @return boolean Success status
 --
-function SystemChat.send_to_participant(room, message, occupantNick, displayName)
-    if not room or not message or not occupantNick then
+function SystemChat.send_to_participant(room, message, occupantJID, displayName)
+    if not room or not message or not occupantJID then
         module:log("error", "Missing required parameters: room, message, and occupantNick");
         return false;
     end
 
-    displayName = displayName or "System";
-
     -- Use json-message for private so UI can show custom displayName and treat it as private
-    local data = {
-        displayName = displayName,
-        type = "system_chat_message",
-        message = message,
-    };
+    local data = { type = "system_chat_message", message = message, displayName = displayName };
+    local stanza = st.message({ from = room.jid, type = "chat" });
+    stanza.attr.to = occupantJID;
 
-    local stanza = st.message({
-        from = room.jid,
-        type = "chat"
-    });
-    stanza.attr.to = occupantNick;
     stanza:tag('json-message', { xmlns = 'http://jitsi.org/jitmeet' }):text(json.encode(data)):up();
 
-    module:log("debug", "Sending private system message to %s in room %s: %s", tostring(occupantNick),
-        room.jid, message);
+    -- module:log("debug", "Sending private system message to %s in room %s: %s", tostring(occupantJID),
+    --     room.jid, message);
 
     room:route_stanza(stanza);
     return true;
@@ -119,27 +83,45 @@ end
 -- @param displayName Optional display name (defaults to "System")
 -- @return boolean Success status
 --
-function SystemChat.send_to_participants(room, message, occupantNicks, displayName)
-    if not room or not message or not occupantNicks then
+function SystemChat.send_to_participants(room, message, occupantJIDs, displayName)
+    if not room or not message or not occupantJIDs then
         module:log("error", "Missing required parameters: room, message, and occupantNicks");
         return false;
     end
 
-    if type(occupantNicks) ~= "table" then
+    if type(occupantJIDs) ~= "table" then
         module:log("error", "occupantNicks must be an array/table");
         return false;
     end
 
     local success_count = 0;
-    for _, to in ipairs(occupantNicks) do
+    for _, to in ipairs(occupantJIDs) do
         if SystemChat.send_to_participant(room, message, to, displayName) then
             success_count = success_count + 1;
         end
     end
 
-    module:log("info", "Sent private system message to %d participants in room %s", success_count, room.jid);
+    -- module:log("info", "Sent private system message to %d participants in room %s", success_count, room.jid);
 
     return success_count > 0;
+end
+
+---
+-- Send a system message to all participants in a room (group chat)
+-- @param room The MUC room object
+-- @param message The message text to send
+-- @param displayName Optional display name (defaults to "System")
+-- @return boolean Success status
+--
+function SystemChat.send_to_all(room, message, displayName)
+    if not room or not message then
+        module:log("error", "Missing required parameters: room and message");
+        return false;
+    end
+
+    -- module:log("debug", "Broadcasting group message (body) in room %s: %s", room.jid, message);
+
+    return SystemChat.send_to_participants(room, message, room:each_occupant(), displayName)
 end
 
 module:log("info", "System chat utility module loaded");
