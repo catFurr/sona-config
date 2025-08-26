@@ -28,10 +28,6 @@ smacks_max_unacked_stanzas = 5;
 smacks_hibernation_time = 30;
 smacks_max_old_sessions = 1;
 
--- Cloudflare TURN configuration
-cf_turn_app_id = "{{ .Env.CF_TURN_APP_ID }}"
-cf_turn_app_secret = "{{ .Env.CF_TURN_APP_SECRET }}"
-
 
 VirtualHost "{{ .Env.XMPP_DOMAIN }}"
     authentication = "token"
@@ -57,8 +53,7 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
         "muc_lobby_rooms";
         "muc_breakout_rooms";
 
-        "external_services"; -- Handles client requests for STUN/TURN
-        "cf_turncredentials"; -- Support CF TURN/STUN
+        "persistent_lobby";
     }
 
     main_muc = "conference.{{ .Env.XMPP_DOMAIN }}"
@@ -69,8 +64,7 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
     end_conference_component = "endconference.{{ .Env.XMPP_DOMAIN }}"
     av_moderation_component = "avmoderation.{{ .Env.XMPP_DOMAIN }}"
     c2s_require_encryption = false
-
-    -- muc_lobby_whitelist = { "recorder.{{ .Env.XMPP_DOMAIN }}" } -- Here we can whitelist jibri to enter lobby enabled rooms
+    muc_lobby_whitelist = { "recorder.{{ .Env.XMPP_DOMAIN }}" } -- Here we can whitelist jibri to enter lobby enabled rooms
     -- smacks_max_hibernated_sessions = 1
 
 VirtualHost "guest.{{ .Env.XMPP_DOMAIN }}"
@@ -114,10 +108,11 @@ Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
         "polls";
         "muc_domain_mapper";
         "muc_password_whitelist";
-
-        "token_verification";
         "muc_hide_all";
         "muc_rate_limit";
+        "muc_max_occupants";
+
+        "meeting_host";
     }
     admins = { "focus@auth.{{ .Env.XMPP_DOMAIN }}" }
     -- The size of the cache that saves state for IP addresses
@@ -130,6 +125,11 @@ Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
     }
     muc_tombstones = false
     muc_room_allow_persistent = false
+    muc_access_whitelist = {
+        "focus@auth.{{ .Env.XMPP_DOMAIN }}";
+    }
+    muc_max_occupants = 100
+    meeting_host_destroy_delay = 300
 
 VirtualHost "recorder.{{ .Env.XMPP_DOMAIN }}"
     modules_enabled = {
