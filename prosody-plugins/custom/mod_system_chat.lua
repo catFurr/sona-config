@@ -148,7 +148,7 @@ function SystemChat.send_to_all(room, message, displayName)
 
     -- Collect occupants into a table first since room:each_occupant() returns an iterator function
     local occupants = {};
-    for occupant in room:each_occupant() do
+    for _, occupant in room:each_occupant() do
         table.insert(occupants, occupant);
     end
 
