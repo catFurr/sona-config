@@ -19,8 +19,6 @@ Component "conference.${XMPP_DOMAIN}" "muc"
     }
     meeting_host_destroy_delay = 120
 ]]
--- local module = {}
--- local prosody = {}
 
 local socket = require 'socket';
 local timer = require 'util.timer';
@@ -80,8 +78,9 @@ local function check_valid_meeting_host(occupant, room, callback)
     -- occupant.sessions = table: 0x594eb79b0ce0
     -- occupant.bare_jid = df4b3628-e17e-4a15-9719-59811caec24e@guest.staj.sonacove.com
     -- occupant.nick = poo@conference.staj.sonacove.com/df4b3628
-    -- occupant.stable_id = rYfYHMPUCD80nZBbf1wa4gk+oygYqBcWm0casoeh9Gg=
     -- occupant.role = participant
+    -- occupant.stable_id? = rYfYHMPUCD80nZBbf1wa4gk+oygYqBcWm0casoeh9Gg=
+    -- occ jid? = 8521c202-29bb-40a3-a757-cc33dcaf6941@staj.sonacove.com
 
     -- _rr.speakerStats = table: 0x594eb766a130
     -- _rr.sent_initial_metadata = table: 0x594eb766a1d0
@@ -218,7 +217,7 @@ local function host_check_success(event)
     -- Send private message to the new host about whiteboard functionality
     system_chat.send_to_participant(room,
         "You are the meeting host. Please use excalidraw.com for whiteboard functionality.",
-        occupant.nick,
+        occupant,
         "System");
 
     -- Cancel any scheduled destruction on join
@@ -260,7 +259,7 @@ module:hook('muc-occupant-pre-join', function(event)
     end
 
     -- once the meeting starts lets not manage the lobby anymore, avoids some edge cases
-    if has_non_system_occupant(room) then return end
+    -- if has_non_system_occupant(room) then return end
 
     module:log('info', 'occ pre join; jid? %s', occupant.bare_jid);
     check_valid_meeting_host(occupant, room, host_check_success)

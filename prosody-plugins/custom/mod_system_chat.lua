@@ -15,18 +15,43 @@ local system_chat = module:require "custom/mod_system_chat";
 system_chat.send_to_all(room, message, "System");
 
 -- Send private message to specific participants
-system_chat.send_to_participants(room, message, occupant.nick, "System");
+system_chat.send_to_participants(room, message, [o1, o2], "System");
 
 -- Send private message to a single participant
-system_chat.send_to_participant(room, message, [o1.nick, o2.nick], "System");
+system_chat.send_to_participant(room, message, occupant, "System");
 ```
 --]]
 
--- local module = {}
--- local prosody = {}
-
 local st = require "util.stanza";
 local json = require "cjson.safe";
+
+
+local function get_jid_from_occupant(occupant)
+    if not occupant or not occupant.bare_jid then
+        module:log("error", "Invalid occupant or missing bare_jid");
+        return nil;
+    end
+
+    if occupant.jid then return occupant.jid end
+
+    -- We get the resource from the active session
+    local _user = prosody.bare_sessions[occupant.bare_jid];
+    if _user and _user.sessions then
+        for resource, _s in pairs(_user.sessions) do
+            -- TODO warn if more than one session found
+            if _s then
+
+                if _s.full_jid then return _s.full_jid end
+
+                if _s.resource then
+                    return occupant.bare_jid .. "/" .. _s.resource
+                end
+
+                return occupant.bare_jid .. "/" .. resource
+            end
+        end
+    end
+end
 
 local SystemChat = {};
 
@@ -51,25 +76,27 @@ end
 -- Send a private system message to a single participant
 -- @param room The MUC room object
 -- @param message The message text to send
--- @param occupantNick The full MUC JID (room@muc/nick) of the occupant to send to (bare JID also accepted)
+-- @param occupant The occupant object to send to
 -- @param displayName Optional display name (defaults to "System")
 -- @return boolean Success status
 --
-function SystemChat.send_to_participant(room, message, occupantJID, displayName)
-    if not room or not message or not occupantJID then
-        module:log("error", "Missing required parameters: room, message, and occupantNick");
+function SystemChat.send_to_participant(room, message, occupant, displayName)
+    if not room or not message or not occupant then
+        module:log("error", "Missing required parameters: room, message, and occupant");
         return false;
     end
+
+    local occJID = get_jid_from_occupant(occupant);
+    if not occJID then return false end
 
     -- Use json-message for private so UI can show custom displayName and treat it as private
     local data = { type = "system_chat_message", message = message, displayName = displayName };
     local stanza = st.message({ from = room.jid, type = "chat" });
-    stanza.attr.to = occupantJID;
+    stanza.attr.to = occJID;
 
     stanza:tag('json-message', { xmlns = 'http://jitsi.org/jitmeet' }):text(json.encode(data)):up();
 
-    -- module:log("debug", "Sending private system message to %s in room %s: %s", tostring(occupantJID),
-    --     room.jid, message);
+    module:log("debug", "Sending private system message to %s in room %s: %s", tostring(occJID), room.jid, message);
 
     room:route_stanza(stanza);
     return true;
@@ -79,24 +106,24 @@ end
 -- Send a private system message to specific participants
 -- @param room The MUC room object
 -- @param message The message text to send
--- @param occupantNicks Array of participant full MUC JIDs (room@muc/nick) to send to (bare JIDs also accepted)
+-- @param occupants Array of occupant objects to send to
 -- @param displayName Optional display name (defaults to "System")
 -- @return boolean Success status
 --
-function SystemChat.send_to_participants(room, message, occupantJIDs, displayName)
-    if not room or not message or not occupantJIDs then
-        module:log("error", "Missing required parameters: room, message, and occupantNicks");
+function SystemChat.send_to_participants(room, message, occupants, displayName)
+    if not room or not message or not occupants then
+        module:log("error", "Missing required parameters: room, message, and occupants");
         return false;
     end
 
-    if type(occupantJIDs) ~= "table" then
-        module:log("error", "occupantNicks must be an array/table");
+    if type(occupants) ~= "table" then
+        module:log("error", "occupants must be an array/table");
         return false;
     end
 
     local success_count = 0;
-    for _, to in ipairs(occupantJIDs) do
-        if SystemChat.send_to_participant(room, message, to, displayName) then
+    for _, occupant in ipairs(occupants) do
+        if SystemChat.send_to_participant(room, message, occupant, displayName) then
             success_count = success_count + 1;
         end
     end
@@ -119,9 +146,15 @@ function SystemChat.send_to_all(room, message, displayName)
         return false;
     end
 
+    -- Collect occupants into a table first since room:each_occupant() returns an iterator function
+    local occupants = {};
+    for occupant in room:each_occupant() do
+        table.insert(occupants, occupant);
+    end
+
     -- module:log("debug", "Broadcasting group message (body) in room %s: %s", room.jid, message);
 
-    return SystemChat.send_to_participants(room, message, room:each_occupant(), displayName)
+    return SystemChat.send_to_participants(room, message, occupants, displayName)
 end
 
 module:log("info", "System chat utility module loaded");
