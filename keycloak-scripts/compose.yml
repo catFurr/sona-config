@@ -6,11 +6,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: keycloak
-    depends_on:
-      postgres:
-        condition: service_healthy
     networks:
       - proxy-network
+      - db-network
     environment:
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: ${KC_DB_PASSWORD}
@@ -84,31 +82,7 @@ services:
       # Service definition for Keycloak
       - "traefik.http.services.keycloak-svc.loadbalancer.server.port=8080" # Keycloak's internal HTTP port
 
-  postgres:
-    image: postgres:17-alpine
-    container_name: postgres
-    networks:
-      - proxy-network
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    environment:
-      POSTGRES_DB: keycloak
-      POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: ${KC_DB_PASSWORD}
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
-      interval: 60s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    logging:
-      driver: json-file
-      options:
-        labels: "app"
-    labels:
-      - "app=postgres"
+
 
   keycloak-webhook-setup:
     build:
@@ -140,7 +114,6 @@ networks:
   proxy-network:
     external: true
     name: proxy-network # Ensure this matches the network name in compose.proxy.yml
-
-volumes:
-  postgres_data:
-    name: postgres_data
+  db-network:
+    external: true
+    name: db-network # Shared with postgres compose file
