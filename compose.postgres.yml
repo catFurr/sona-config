@@ -33,7 +33,7 @@ services:
       - "traefik.docker.network=proxy-network"
       
       # TCP Router for PostgreSQL direct access (for cloud functions)
-      - "traefik.tcp.routers.postgres-tcp.rule=HostSNI(`${DB_DOMAIN}`)"
+      - "traefik.tcp.routers.postgres-tcp.rule=HostSNI(`${XMPP_DOMAIN}`)"
       - "traefik.tcp.routers.postgres-tcp.entrypoints=postgres"
       - "traefik.tcp.routers.postgres-tcp.tls=true"
       - "traefik.tcp.routers.postgres-tcp.tls.certresolver=myresolver"
@@ -70,20 +70,15 @@ services:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy-network"
       
-      # HTTPS Router for Drizzle Gateway
-      - "traefik.http.routers.drizzle-secure.rule=Host(`${DRIZZLE_DOMAIN}`) && PathPrefix(`/`)"
-      - "traefik.http.routers.drizzle-secure.entrypoints=websecure"
+      # HTTPS Router for Drizzle Gateway on separate port
+      - "traefik.http.routers.drizzle-secure.rule=Host(`${XMPP_DOMAIN}`)"
+      - "traefik.http.routers.drizzle-secure.entrypoints=drizzle"
       - "traefik.http.routers.drizzle-secure.tls=true"
       - "traefik.http.routers.drizzle-secure.tls.certresolver=myresolver"
       - "traefik.http.routers.drizzle-secure.service=drizzle-svc"
       
-      # Apply strict security headers and basic auth for additional protection
-      - "traefik.http.routers.drizzle-secure.middlewares=drizzle-auth@docker,drizzle-headers@docker"
-      
-      # Basic Auth middleware (optional additional layer of security)
-      # Generate with: echo $(htpasswd -nb user password) | sed -e s/\\$/\\$\\$/g
-      - "traefik.http.middlewares.drizzle-auth.basicauth.users=${DRIZZLE_BASIC_AUTH}"
-      - "traefik.http.middlewares.drizzle-auth.basicauth.realm=Drizzle Gateway"
+      # Apply security headers only (master password provides authentication)
+      - "traefik.http.routers.drizzle-secure.middlewares=drizzle-headers@docker"
       
       # Security headers specific to API access
       - "traefik.http.middlewares.drizzle-headers.headers.customResponseHeaders.X-Content-Type-Options=nosniff"
