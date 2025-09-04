@@ -17,12 +17,22 @@ Component "conference.${XMPP_DOMAIN}" "muc"
         ...
         "meeting_host";
     }
+    webhook_api_url = ""
+    booking_api_url = ""
+    cf_api_bearer = "KBKJasfdNknlknln"
+    cf_api_timeout = 20
     meeting_host_destroy_delay = 120
 ]]
+
+local module = {}
+local prosody = {}
 
 local socket = require 'socket';
 local timer = require 'util.timer';
 local jid = require 'util.jid';
+local http = require "net.http";
+
+local have_async, async = pcall(require, "util.async");
 
 local system_chat = module:require 'mod_system_chat';
 local util = module:require "util";
@@ -33,8 +43,17 @@ local process_host_module = util.process_host_module;
 
 local destroy_delay_seconds = module:get_option_number('meeting_host_destroy_delay', 120);
 local muc_domain_base = module:get_option_string('muc_mapper_domain_base');
-if not muc_domain_base then
-    module:log('warn', "No 'muc_mapper_domain_base' option set, disabling module");
+local booking_api_url = module:get_option_string("booking_api_url");
+local webhook_api_url = module:get_option_string("webhook_api_url");
+local api_bearer = module:get_option_string("cf_api_bearer");
+local api_timeout = module:get_option_number("cf_api_timeout", 20);
+if not muc_domain_base or not api_bearer then
+    module:log('warn', "Required options not set, disabling module");
+    return
+end
+
+if not have_async then
+    module:log("warn", "requires a version of Prosody with util.async, module disabled");
     return
 end
 
@@ -43,6 +62,27 @@ local lobby_host;
 
 
 -- Helpers
+local function send_api_event(type, room, session)
+    local http_options = {
+        body = {
+            type = type;
+            room = jid.node(room.jid);
+            email = session.jitsi_meet_context_user.email;
+        };
+        method = 'POST';
+        headers = {
+            ["User-Agent"] = "Prosody ("..prosody.version.."; "..prosody.platform..")";
+            ["Authorization"] = "Bearer "..api_bearer;
+        };
+    }
+
+    local function cb_(content_, code_, response_, request_)
+        -- Nothing to do here.
+    end
+
+    http.request(webhook_api_url, http_options, cb_);
+end
+
 local function has_host(room)
     for _, o in room:each_occupant() do
         local aff = room:get_affiliation(o.bare_jid);
@@ -131,9 +171,56 @@ local function check_valid_meeting_host(occupant, room, callback)
         return;
     end
 
-    -- TODO Call the http endpoint
-    session.is_valid_host = true;
-    callback({ room = room, occupant = occupant, origin = session });
+    -- Call the http endpoint
+    local wait, done = async.waiter();
+    local completed = false;
+    local timed_out = false;
+
+    local http_options = {
+        body = {
+            room = jid.node(room.jid);
+            email = session.jitsi_meet_context_user.email;
+        };
+        method = 'GET';
+        headers = {
+            ["User-Agent"] = "Prosody ("..prosody.version.."; "..prosody.platform..")";
+            ["Authorization"] = "Bearer "..api_bearer;
+        };
+    }
+
+    local function cb_(content_, code_, response_, request_)
+        if not timed_out then -- request completed before timeout
+            local code = code_;
+            if code == 200 or code == 204 then
+                local content = content_;
+                -- Response Type: {
+                --     max_occupants: 100,
+                --     lobby: false,
+                --     password: "",
+                -- }
+                module:log('info', 'from api response code %s, content %s', code, content);
+                session.is_valid_host = true;
+                callback({ room = room, occupant = occupant, origin = session });
+            else
+                module:log("warn", "Error on GET request: Code %s, Content %s", code_, content_);
+            end
+        end
+        completed = true;
+        done();
+    end
+
+    module:log("debug", "Sending GET /manage-booking for %s", room.jid);
+    local request = http.request(booking_api_url, http_options, cb_);
+
+    timer.add_task(api_timeout, function ()
+        -- no longer present in prosody 0.11, so check before calling
+        if not completed and http.destroy_request ~= nil then
+            http.destroy_request(request);
+        end
+        timed_out = true;
+        done();
+    end);
+    wait();
 end
 
 local function schedule_room_destruction(room)
@@ -193,21 +280,14 @@ local function schedule_room_destruction(room)
     timer.add_task(destroy_delay_seconds, try_destroy);
 end
 
-
--- TODO
--- host rejoin does not promote them to host
--- private message not sent to host
--- chat message has `System (viewer)` which looks wierd. (change in lang)
--- scheduled destruction doesnt end meeting cleanly
--- isHost not working for self ✅
--- conference does not end? (set room persistent to false) ✅
-
 local function host_check_success(event)
     local room, occupant, session = event.room, event.occupant, event.origin;
     if not room or not occupant or not session then return end
     if not room._data or room._data.has_host then return end
 
+    -- Assigning this user as host
     room._data.has_host = true;
+    send_api_event('HOST_ASSIGNED', room, session);
 
     room:set_affiliation(true, occupant.bare_jid, 'owner');
     occupant.role = room:get_default_role(room:get_affiliation(occupant.bare_jid)) or 'moderator';
@@ -261,6 +341,8 @@ module:hook('muc-occupant-pre-join', function(event)
     -- once the meeting starts lets not manage the lobby anymore, avoids some edge cases
     -- if has_non_system_occupant(room) then return end
 
+    -- TODO only original host rejoin should promote them to host
+
     module:log('info', 'occ pre join; jid? %s', occupant.bare_jid);
     check_valid_meeting_host(occupant, room, host_check_success)
     module:log('info', 'post fire check host');
@@ -290,7 +372,9 @@ module:hook('muc-occupant-left', function(event)
         return;
     end
 
+    -- The host left
     room._data.has_host = false;
+    send_api_event('HOST_LEFT', room, session);
 
     -- No other owners; try to promote, otherwise schedule destruction
     -- TODO call these async so they happen in parallel
@@ -301,7 +385,6 @@ module:hook('muc-occupant-left', function(event)
     end
 
     -- if no host in 3 seconds, schedule room destruction
-    -- FIXME: possible race condition with the async calls above
     timer.add_task(3, function()
         if not has_host(room) then
             schedule_room_destruction(room);

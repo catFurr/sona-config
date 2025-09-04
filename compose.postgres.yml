@@ -10,12 +10,12 @@ services:
       - db-network
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: ${KC_DB_PASSWORD}
-      # Additional users will be created via init script
+      # Password for cloud function user (created by init script)
       CF_PASSWORD: ${KC_DB_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
@@ -33,14 +33,14 @@ services:
       - "app=postgres"
       - "traefik.enable=true"
       - "traefik.docker.network=proxy-network"
-      
+
       # TCP Router for PostgreSQL direct access (for cloud functions)
       - "traefik.tcp.routers.postgres-tcp.rule=HostSNI(`${XMPP_DOMAIN}`)"
       - "traefik.tcp.routers.postgres-tcp.entrypoints=postgres"
       - "traefik.tcp.routers.postgres-tcp.tls=true"
       - "traefik.tcp.routers.postgres-tcp.tls.certresolver=myresolver"
       - "traefik.tcp.routers.postgres-tcp.service=postgres-svc"
-      
+
       # Service definition for PostgreSQL
       - "traefik.tcp.services.postgres-svc.loadbalancer.server.port=5432"
 
@@ -71,29 +71,28 @@ services:
       - "app=drizzle-gateway"
       - "traefik.enable=true"
       - "traefik.docker.network=proxy-network"
-      
+
       # HTTPS Router for Drizzle Gateway on separate port
       - "traefik.http.routers.drizzle-secure.rule=Host(`${XMPP_DOMAIN}`)"
       - "traefik.http.routers.drizzle-secure.entrypoints=drizzle"
       - "traefik.http.routers.drizzle-secure.tls=true"
       - "traefik.http.routers.drizzle-secure.tls.certresolver=myresolver"
       - "traefik.http.routers.drizzle-secure.service=drizzle-svc"
-      
-      # Apply security headers only (master password provides authentication)
-      - "traefik.http.routers.drizzle-secure.middlewares=drizzle-headers@docker"
-      
+
+      # Apply security headers and rate limiting
+      - "traefik.http.routers.drizzle-secure.middlewares=drizzle-headers@docker,drizzle-ratelimit@docker"
+
       # Security headers specific to API access
       - "traefik.http.middlewares.drizzle-headers.headers.customResponseHeaders.X-Content-Type-Options=nosniff"
       - "traefik.http.middlewares.drizzle-headers.headers.customResponseHeaders.X-Frame-Options=DENY"
       - "traefik.http.middlewares.drizzle-headers.headers.customResponseHeaders.X-XSS-Protection=1; mode=block"
       - "traefik.http.middlewares.drizzle-headers.headers.customResponseHeaders.Strict-Transport-Security=max-age=63072000; includeSubDomains; preload"
       - "traefik.http.middlewares.drizzle-headers.headers.customResponseHeaders.Content-Security-Policy=default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' https: data:; font-src 'self' https: data:;"
-      
+
       # Rate limiting for API protection
       - "traefik.http.middlewares.drizzle-ratelimit.ratelimit.average=100"
       - "traefik.http.middlewares.drizzle-ratelimit.ratelimit.burst=50"
-      - "traefik.http.routers.drizzle-secure.middlewares=drizzle-auth@docker,drizzle-headers@docker,drizzle-ratelimit@docker"
-      
+
       # Service definition for Drizzle Gateway
       - "traefik.http.services.drizzle-svc.loadbalancer.server.port=4983"
 

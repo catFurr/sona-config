@@ -4,13 +4,11 @@
 
 -- Create the 'cf' user for cloud functions if it doesn't exist
 -- This user can read from all schemas but only write to the sonacove schema
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'cf') THEN
-        CREATE USER cf WITH PASSWORD :'CF_PASSWORD';
-    END IF;
-END
-$$;
+-- The CF_PASSWORD variable should be set when calling this script
+
+-- Drop and recreate user to ensure clean state (safer than IF NOT EXISTS)
+DROP USER IF EXISTS cf;
+CREATE USER cf WITH PASSWORD :'CF_PASSWORD';
 
 -- Grant connect permission to the database
 GRANT CONNECT ON DATABASE keycloak TO cf;

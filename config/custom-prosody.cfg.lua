@@ -128,6 +128,9 @@ Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
     muc_access_whitelist = {
         "focus@auth.{{ .Env.XMPP_DOMAIN }}";
     }
+    webhook_api_url = "{{ .Env.CF_API_DOMAIN }}/api/prosody-webhook"
+    booking_api_url = "{{ .Env.CF_API_DOMAIN }}/api/manage-booking"
+    cf_api_bearer = "{{ .Env.CF_API_BEARER }}"
     muc_max_occupants = 100
     meeting_host_destroy_delay = 300
 
