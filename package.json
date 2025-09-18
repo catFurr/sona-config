@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@pushcorn/hocon-parser": "^1.3.1",
+    "selenium-webdriver": "^4.35.0",
     "yaml": "^2.8.0"
   }
 }

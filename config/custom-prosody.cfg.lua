@@ -33,8 +33,8 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
     authentication = "token"
     app_id = "jitsi-meet"
     asap_key_server = true
-    cache_keys_url = "{{ .Env.KC_HOST_URL }}realms/jitsi/protocol/openid-connect/certs"
-    asap_accepted_issuers = { "{{ .Env.KC_HOST_URL }}realms/jitsi" }
+    cache_keys_url = "{{ .Env.KC_HOST_URL }}/realms/jitsi/protocol/openid-connect/certs"
+    asap_accepted_issuers = { "{{ .Env.KC_HOST_URL }}/realms/jitsi" }
     asap_accepted_audiences = { "jitsi-web", "account" }
     asap_require_room_claim = true
     allow_empty_token = false

@@ -6,12 +6,24 @@
 -- This user can read from all schemas but only write to the sonacove schema
 -- The CF_PASSWORD variable should be set when calling this script
 
--- Drop and recreate user to ensure clean state (safer than IF NOT EXISTS)
-DROP USER IF EXISTS cf;
-CREATE USER cf WITH PASSWORD :'CF_PASSWORD';
+-- Create or update the 'cf' user for cloud functions
+-- Handle existing user gracefully
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cf') THEN
+        CREATE USER cf WITH PASSWORD :'CF_PASSWORD';
+    ELSE
+        -- Update password if user exists
+        ALTER USER cf WITH PASSWORD :'CF_PASSWORD';
+    END IF;
+END
+$$;
 
 -- Grant connect permission to the database
 GRANT CONNECT ON DATABASE keycloak TO cf;
+
+-- Grant schema creation privileges on the database
+GRANT CREATE ON DATABASE keycloak TO cf;
 
 -- Grant usage on the public schema (for reading Keycloak tables)
 GRANT USAGE ON SCHEMA public TO cf;
@@ -63,4 +75,6 @@ CREATE SCHEMA IF NOT EXISTS drizzle;
 -- Grant permissions on drizzle schema to cf user (for migrations)
 GRANT ALL PRIVILEGES ON SCHEMA drizzle TO cf;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA drizzle TO cf;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA drizzle TO cf;
 ALTER DEFAULT PRIVILEGES IN SCHEMA drizzle GRANT ALL PRIVILEGES ON TABLES TO cf;
+ALTER DEFAULT PRIVILEGES IN SCHEMA drizzle GRANT ALL PRIVILEGES ON SEQUENCES TO cf;

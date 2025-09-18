@@ -189,6 +189,7 @@ local function check_valid_meeting_host(occupant, room, callback)
     }
 
     local function cb_(content_, code_, response_, request_)
+        completed = true;
         if not timed_out then -- request completed before timeout
             local code = code_;
             if code == 200 or code == 204 then
@@ -204,21 +205,22 @@ local function check_valid_meeting_host(occupant, room, callback)
             else
                 module:log("warn", "Error on GET request: Code %s, Content %s", code_, content_);
             end
+            done();
         end
-        completed = true;
-        done();
     end
 
-    module:log("debug", "Sending GET /manage-booking for %s", room.jid);
+    module:log("debug", "Sending GET %s for %s", booking_api_url, room.jid);
     local request = http.request(booking_api_url, http_options, cb_);
 
     timer.add_task(api_timeout, function ()
-        -- no longer present in prosody 0.11, so check before calling
-        if not completed and http.destroy_request ~= nil then
-            http.destroy_request(request);
-        end
         timed_out = true;
-        done();
+        if not completed then
+            if http.destroy_request ~= nil then
+                -- no longer present in prosody 0.11, so check before calling
+                http.destroy_request(request);
+            end
+            done();
+        end
     end);
     wait();
 end
