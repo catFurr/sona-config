@@ -24,9 +24,6 @@ Component "conference.${XMPP_DOMAIN}" "muc"
     meeting_host_destroy_delay = 120
 ]]
 
-local module = {}
-local prosody = {}
-
 local socket = require 'socket';
 local timer = require 'util.timer';
 local jid = require 'util.jid';
@@ -176,11 +173,11 @@ local function check_valid_meeting_host(occupant, room, callback)
     local completed = false;
     local timed_out = false;
 
+    local room_name = jid.node(room.jid);
+    local user_email = session.jitsi_meet_context_user.email;
+    local url_with_params = booking_api_url .. "?room=" .. room_name .. "&email=" .. user_email;
+    
     local http_options = {
-        body = {
-            room = jid.node(room.jid);
-            email = session.jitsi_meet_context_user.email;
-        };
         method = 'GET';
         headers = {
             ["User-Agent"] = "Prosody ("..prosody.version.."; "..prosody.platform..")";
@@ -209,8 +206,8 @@ local function check_valid_meeting_host(occupant, room, callback)
         end
     end
 
-    module:log("debug", "Sending GET %s for %s", booking_api_url, room.jid);
-    local request = http.request(booking_api_url, http_options, cb_);
+    module:log("debug", "Sending GET %s for %s", url_with_params, room.jid);
+    local request = http.request(url_with_params, http_options, cb_);
 
     timer.add_task(api_timeout, function ()
         timed_out = true;
