@@ -28,6 +28,7 @@ local socket = require 'socket';
 local timer = require 'util.timer';
 local jid = require 'util.jid';
 local http = require "net.http";
+local json = require "cjson.safe";
 
 local have_async, async = pcall(require, "util.async");
 
@@ -61,15 +62,16 @@ local lobby_host;
 -- Helpers
 local function send_api_event(type, room, session)
     local http_options = {
-        body = {
+        body = json.encode({
             type = type;
             room = jid.node(room.jid);
             email = session.jitsi_meet_context_user.email;
-        };
+        });
         method = 'POST';
         headers = {
             ["User-Agent"] = "Prosody ("..prosody.version.."; "..prosody.platform..")";
             ["Authorization"] = "Bearer "..api_bearer;
+            ["Content-Type"] = "application/json";
         };
     }
 

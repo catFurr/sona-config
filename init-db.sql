@@ -1,23 +1,15 @@
 -- Database initialization script for PostgreSQL
 -- This script creates the necessary users and permissions for Keycloak and Cloud Functions
--- This script is idempotent and can be run multiple times safely
 
 -- Create the 'cf' user for cloud functions if it doesn't exist
 -- This user can read from all schemas but only write to the sonacove schema
 -- The CF_PASSWORD variable should be set when calling this script
 
--- Create or update the 'cf' user for cloud functions
+-- Create the 'cf' user for cloud functions
 -- Handle existing user gracefully
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cf') THEN
-        CREATE USER cf WITH PASSWORD :'CF_PASSWORD';
-    ELSE
-        -- Update password if user exists
-        ALTER USER cf WITH PASSWORD :'CF_PASSWORD';
-    END IF;
-END
-$$;
+\set ON_ERROR_STOP off
+CREATE USER cf WITH PASSWORD :'CF_PASSWORD';
+\set ON_ERROR_STOP on
 
 -- Grant connect permission to the database
 GRANT CONNECT ON DATABASE keycloak TO cf;
