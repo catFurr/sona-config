@@ -361,21 +361,44 @@ end);
 
 module:hook('muc-occupant-left', function(event)
     local room, occupant, session = event.room, event.occupant, event.origin;
-    if not room or not occupant or not session then return end
+    if not room or not occupant then return end
 
     if is_healthcheck_room(room.jid) or is_admin(occupant.bare_jid) then
         return;
     end
 
+    if not session then
+        -- session is not defined when this event is fired 
+        -- from room_mt:destroy -> room_mt:clear
+        local _user = prosody.bare_sessions[occupant.bare_jid];
+        if _user and _user.sessions then
+            for resource, _s in pairs(_user.sessions) do
+                -- TODO warn if more than one session found
+                if _s then
+                    session = _s;
+                    break;
+                end
+            end
+        end
+    end
+    if not session then
+        module:log('warn', 'muc-occupant-left called, but no session could found');
+        return;
+    end
+
     module:log('info', 'occ left; is valid host? %s', session.is_valid_host);
 
-    if not session.is_valid_host or not has_non_system_occupant(room) or has_host(room) then
+    if not session.is_valid_host or has_host(room) then
         return;
     end
 
     -- The host left
     room._data.has_host = false;
     send_api_event('HOST_LEFT', room, session);
+
+    if not has_non_system_occupant(room) then
+        return;
+    end
 
     -- No other owners; try to promote, otherwise schedule destruction
     -- TODO call these async so they happen in parallel
