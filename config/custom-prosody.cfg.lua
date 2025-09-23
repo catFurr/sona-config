@@ -33,8 +33,8 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
     authentication = "token"
     app_id = "jitsi-meet"
     asap_key_server = true
-    cache_keys_url = "{{ .Env.KC_HOST_URL }}realms/jitsi/protocol/openid-connect/certs"
-    asap_accepted_issuers = { "{{ .Env.KC_HOST_URL }}realms/jitsi" }
+    cache_keys_url = "{{ .Env.KC_HOST_URL }}/realms/jitsi/protocol/openid-connect/certs"
+    asap_accepted_issuers = { "{{ .Env.KC_HOST_URL }}/realms/jitsi" }
     asap_accepted_audiences = { "jitsi-web", "account" }
     asap_require_room_claim = true
     allow_empty_token = false
@@ -128,6 +128,9 @@ Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
     muc_access_whitelist = {
         "focus@auth.{{ .Env.XMPP_DOMAIN }}";
     }
+    webhook_api_url = "{{ .Env.CF_API_DOMAIN }}/api/prosody-webhook"
+    booking_api_url = "{{ .Env.CF_API_DOMAIN }}/api/manage-booking"
+    cf_api_bearer = "{{ .Env.CF_API_BEARER }}"
     muc_max_occupants = 100
     meeting_host_destroy_delay = 300
 

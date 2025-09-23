@@ -32,6 +32,8 @@ services:
       - KC_HOST_URL=${KC_HOST_URL}
       - CF_TURN_APP_ID=${CF_TURN_APP_ID}
       - CF_TURN_APP_SECRET=${CF_TURN_APP_SECRET}
+      - CF_API_BEARER=${CF_API_BEARER}
+      - CF_API_DOMAIN=${CF_API_DOMAIN}
     logging:
       driver: json-file
       options:
