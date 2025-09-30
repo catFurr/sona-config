@@ -15,6 +15,24 @@ const __dirname = dirname(__filename);
 
 // Configuration constants
 const GITHUB_URL = "https://raw.githubusercontent.com/jitsi/";
+
+// Release/Commit Configuration
+// Set these to specify which release/commit to fetch files from
+// Leave empty to use the latest master branch
+const RELEASE_CONFIG = {
+  // Specific commit hash (e.g., "955816e0fca70bbf033ea3fd1fa7c1a4cd8c2075")
+  // or release tag (e.g., "stable/jitsi-meet_10532")
+  jitsiVideobridge: "", // e.g., "955816e0fca70bbf033ea3fd1fa7c1a4cd8c2075"
+  ice4j: "", // e.g., "stable/jitsi-meet_10532"
+  dockerJitsiMeet: "", // e.g., "stable/jitsi-meet_10532"
+  jicofo: "", // e.g., "stable/jitsi-meet_10532"
+};
+
+// Helper function to get the branch/commit for a repository
+function getBranchOrCommit(repo: keyof typeof RELEASE_CONFIG): string {
+  const value = RELEASE_CONFIG[repo];
+  return value || "master";
+}
 const PATHS = {
   jvbReference: join(__dirname, "../videobridge/reference/"),
   jicofoReference: join(__dirname, "../config/jicofoReference/"),
@@ -39,71 +57,69 @@ PATHS.compiledProsodyConfig = join(PATHS.buildDir, "prosody.conf.compiled");
 
 const jvbReferenceTargets: DownloadTarget[] = [
   {
-    url: GITHUB_URL + "jitsi-videobridge/master/jvb/src/main/resources/reference.conf",
+    url: GITHUB_URL + `jitsi-videobridge/${getBranchOrCommit("jitsiVideobridge")}/jvb/src/main/resources/reference.conf`,
     path: join(PATHS.jvbReference, "jvb-reference.conf"),
   },
   {
-    url: GITHUB_URL + "ice4j/master/src/main/resources/reference.conf",
+    url: GITHUB_URL + `ice4j/${getBranchOrCommit("ice4j")}/src/main/resources/reference.conf`,
     path: join(PATHS.jvbReference, "ice4j-reference.conf"),
   },
   {
-    url: GITHUB_URL + "docker-jitsi-meet/master/jvb/rootfs/etc/cont-init.d/10-config",
+    url: GITHUB_URL + `docker-jitsi-meet/${getBranchOrCommit("dockerJitsiMeet")}/jvb/rootfs/etc/cont-init.d/10-config`,
     path: join(PATHS.jvbReference, "10-config"),
   },
   {
-    url: GITHUB_URL + "docker-jitsi-meet/master/jvb/rootfs/defaults/jvb.conf",
+    url: GITHUB_URL + `docker-jitsi-meet/${getBranchOrCommit("dockerJitsiMeet")}/jvb/rootfs/defaults/jvb.conf`,
     path: join(PATHS.jvbReference, "jvb.conf"),
   },
   {
-    url: GITHUB_URL + "docker-jitsi-meet/master/jvb/rootfs/defaults/logging.properties",
+    url: GITHUB_URL + `docker-jitsi-meet/${getBranchOrCommit("dockerJitsiMeet")}/jvb/rootfs/defaults/logging.properties`,
     path: join(PATHS.jvbReference, "logging.properties"),
   },
   {
-    url:
-      GITHUB_URL +
-      "jitsi-videobridge/master/jitsi-media-transform/src/main/resources/reference.conf",
+    url: GITHUB_URL + `jitsi-videobridge/${getBranchOrCommit("jitsiVideobridge")}/jitsi-media-transform/src/main/resources/reference.conf`,
     path: join(PATHS.jvbReference, "jitsi-media-transform-reference.conf"),
   },
 ];
 
 const jicofoReferenceTargets: DownloadTarget[] = [
   {
-    url: GITHUB_URL + "jicofo/master/jicofo-selector/src/main/resources/reference.conf",
+    url: GITHUB_URL + `jicofo/${getBranchOrCommit("jicofo")}/jicofo-selector/src/main/resources/reference.conf`,
     path: join(PATHS.jicofoReference, "jicofo-reference.conf"),
   },
   {
-    url: GITHUB_URL + "docker-jitsi-meet/master/jicofo/rootfs/etc/cont-init.d/10-config",
+    url: GITHUB_URL + `docker-jitsi-meet/${getBranchOrCommit("dockerJitsiMeet")}/jicofo/rootfs/etc/cont-init.d/10-config`,
     path: join(PATHS.jicofoReference, "10-config"),
   },
   {
-    url: GITHUB_URL + "docker-jitsi-meet/master/jicofo/rootfs/defaults/jicofo.conf",
+    url: GITHUB_URL + `docker-jitsi-meet/${getBranchOrCommit("dockerJitsiMeet")}/jicofo/rootfs/defaults/jicofo.conf`,
     path: join(PATHS.jicofoReference, "jicofo.conf"),
   },
   {
-    url: GITHUB_URL + "docker-jitsi-meet/master/jicofo/rootfs/defaults/logging.properties",
+    url: GITHUB_URL + `docker-jitsi-meet/${getBranchOrCommit("dockerJitsiMeet")}/jicofo/rootfs/defaults/logging.properties`,
     path: join(PATHS.jicofoReference, "logging.properties"),
   },
 ];
 
 const prosodyReferenceTargets: DownloadTarget[] = [
   {
-    url: GITHUB_URL + "docker-jitsi-meet/master/prosody/rootfs/etc/cont-init.d/10-config",
+    url: GITHUB_URL + `docker-jitsi-meet/${getBranchOrCommit("dockerJitsiMeet")}/prosody/rootfs/etc/cont-init.d/10-config`,
     path: join(PATHS.prosodyReference, "10-config"),
   },
   {
-    url: GITHUB_URL + "docker-jitsi-meet/master/prosody/rootfs/defaults/prosody.cfg.lua",
+    url: GITHUB_URL + `docker-jitsi-meet/${getBranchOrCommit("dockerJitsiMeet")}/prosody/rootfs/defaults/prosody.cfg.lua`,
     path: join(PATHS.prosodyReference, "prosody.cfg.lua"),
   },
   {
-    url: GITHUB_URL + "docker-jitsi-meet/master/prosody/rootfs/defaults/conf.d/brewery.cfg.lua",
+    url: GITHUB_URL + `docker-jitsi-meet/${getBranchOrCommit("dockerJitsiMeet")}/prosody/rootfs/defaults/conf.d/brewery.cfg.lua`,
     path: join(PATHS.prosodyReference, "brewery.cfg.lua"),
   },
   {
-    url: GITHUB_URL + "docker-jitsi-meet/master/prosody/rootfs/defaults/conf.d/jitsi-meet.cfg.lua",
+    url: GITHUB_URL + `docker-jitsi-meet/${getBranchOrCommit("dockerJitsiMeet")}/prosody/rootfs/defaults/conf.d/jitsi-meet.cfg.lua`,
     path: join(PATHS.prosodyReference, "jitsi-meet.cfg.lua"),
   },
   {
-    url: GITHUB_URL + "docker-jitsi-meet/master/prosody/rootfs/defaults/conf.d/visitors.cfg.lua",
+    url: GITHUB_URL + `docker-jitsi-meet/${getBranchOrCommit("dockerJitsiMeet")}/prosody/rootfs/defaults/conf.d/visitors.cfg.lua`,
     path: join(PATHS.prosodyReference, "visitors.cfg.lua"),
   },
 ];
@@ -113,6 +129,14 @@ class ConfigSyncManager {
 
   async run(): Promise<void> {
     console.log("🚀 Starting config update process...\n");
+    
+    // Log which commits/releases are being used
+    console.log("📋 Using the following commits/releases:");
+    Object.entries(RELEASE_CONFIG).forEach(([repo, commit]) => {
+      const branchOrCommit = getBranchOrCommit(repo as keyof typeof RELEASE_CONFIG);
+      console.log(`  ${repo}: ${commit || "master (latest)"}`);
+    });
+    console.log();
 
     try {
       // Step 0: Create build directory if needed

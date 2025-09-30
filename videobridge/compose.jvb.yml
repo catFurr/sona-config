@@ -1,6 +1,6 @@
 services:
   jvb:
-    image: jitsi/jvb:stable-10431
+    image: jitsi/jvb:stable-10532-1
     container_name: jvb
     restart: unless-stopped
     healthcheck:

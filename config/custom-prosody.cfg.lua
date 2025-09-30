@@ -74,6 +74,8 @@ VirtualHost "guest.{{ .Env.XMPP_DOMAIN }}"
     }
     main_muc = "conference.{{ .Env.XMPP_DOMAIN }}"
     c2s_require_encryption = false
+    lobby_muc = "lobby.{{ .Env.XMPP_DOMAIN }}"
+    breakout_rooms_muc = "breakout.{{ .Env.XMPP_DOMAIN }}"
 
 VirtualHost "auth.{{ .Env.XMPP_DOMAIN }}"
     modules_enabled = {
@@ -105,7 +107,6 @@ Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
     storage = "memory"
     modules_enabled = {
         "muc_meeting_id";
-        "polls";
         "muc_domain_mapper";
         "muc_password_whitelist";
         "muc_hide_all";
@@ -152,14 +153,12 @@ Component "lobby.{{ .Env.XMPP_DOMAIN }}" "muc"
     modules_enabled = {
         "muc_hide_all";
         "muc_rate_limit";
-        "polls";
     }
 
 Component "breakout.{{ .Env.XMPP_DOMAIN }}" "muc"
     storage = "memory"
     modules_enabled = {
         "muc_meeting_id";
-        "polls";
 
         "muc_hide_all";
         "muc_domain_mapper";
@@ -192,3 +191,5 @@ Component "filesharing.{{ .Env.XMPP_DOMAIN }}" "filesharing_component"
 Component "metadata.{{ .Env.XMPP_DOMAIN }}" "room_metadata_component"
     muc_component = "conference.{{ .Env.XMPP_DOMAIN }}"
     breakout_rooms_component = "breakout.{{ .Env.XMPP_DOMAIN }}"
+
+Component "polls.{{ .Env.XMPP_DOMAIN }}" "polls_component"
