@@ -1,7 +1,7 @@
 services:
   # XMPP Server
   prosody:
-    image: jitsi/prosody:stable-10431
+    image: jitsi/prosody:stable-10532-1
     container_name: prosody
     restart: unless-stopped
     healthcheck:
@@ -82,7 +82,7 @@ services:
 
   # Focus component
   jicofo:
-    image: jitsi/jicofo:stable-10431
+    image: jitsi/jicofo:stable-10532-1
     container_name: jicofo
     restart: unless-stopped
     healthcheck:

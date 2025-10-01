@@ -44,7 +44,7 @@ local muc_domain_base = module:get_option_string('muc_mapper_domain_base');
 local booking_api_url = module:get_option_string("booking_api_url");
 local webhook_api_url = module:get_option_string("webhook_api_url");
 local api_bearer = module:get_option_string("cf_api_bearer");
-local api_timeout = module:get_option_number("cf_api_timeout", 20);
+local api_timeout = module:get_option_number("cf_api_timeout", 5);
 if not muc_domain_base or not api_bearer then
     module:log('warn', "Required options not set, disabling module");
     return
@@ -208,7 +208,7 @@ local function check_valid_meeting_host(occupant, room, callback)
         end
     end
 
-    module:log("debug", "Sending GET %s for %s", url_with_params, room.jid);
+    module:log("info", "Sending GET %s for %s", url_with_params, room.jid);
     local request = http.request(url_with_params, http_options, cb_);
 
     timer.add_task(api_timeout, function ()
