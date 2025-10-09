@@ -69,8 +69,7 @@ services:
     container_name: otel-collector
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     user: "0:0" # Run as root to access Docker socket and container logs
-    <<: *common-config
-    <<: *common-environment
+    <<: [*common-config, *common-environment]
     volumes:
       - ./otel-config.yml:/etc/otelcol-contrib/config.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -87,8 +86,7 @@ services:
       interval: 60s
       timeout: 5s
       retries: 10
-    <<: *common-config
-    <<: *common-environment
+    <<: [*common-config, *common-environment]
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
@@ -139,8 +137,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    <<: *common-config
-    <<: *common-environment
+    <<: [*common-config, *common-environment]
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/realm-template.json:ro # Mount as template, not in import directory
       - ./keycloak/entrypoint.sh:/opt/keycloak/entrypoint.sh:ro # Mount the entrypoint script
@@ -160,8 +157,7 @@ services:
     depends_on:
       keycloak:
         condition: service_healthy
-    <<: *common-config
-    <<: *common-environment
+    <<: [*common-config, *common-environment]
     labels:
       - "app=keycloak-webhook-setup"
 
@@ -175,8 +171,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    <<: *common-config
-    <<: *common-environment
+    <<: [*common-config, *common-environment]
     volumes:
       # Override the default plugins with our own
       - ./prosody/plugins/token/util.lib.lua:/prosody-plugins/token/util.lib.lua:ro
@@ -210,8 +205,7 @@ services:
     depends_on:
       prosody:
         condition: service_healthy
-    <<: *common-config
-    <<: *common-environment
+    <<: [*common-config, *common-environment]
     volumes:
       - ./prosody/custom-jicofo.conf:/defaults/jicofo.conf:ro
       - ./prosody/custom-logging.properties:/defaults/logging.properties:ro
