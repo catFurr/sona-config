@@ -171,6 +171,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    depends_on:
+      keycloak:
+        condition: service_healthy
     <<: [*common-config, *common-environment]
     volumes:
       # Override the default plugins with our own
