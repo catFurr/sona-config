@@ -4,7 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "fetch-config": "bun run config-tools/main.ts"
+    "fetch-config": "bun run setup/main.ts",
+    "compile-nginx": "bun run setup/nginx-compiler.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"

@@ -5,30 +5,96 @@ cp example.env .env
 vi .env
 # Edit with real values
 
+# Install Bun and compile configs
+curl -fsSL https://bun.sh/install | bash
+bun install --frozen-lockfile
+bun run compile-nginx
 
-# Start traefik and proxy infrastructure first
-docker compose -f compose.proxy.yml --env-file .env up -d
+# Setup nginx to use compiled configurations
+sudo mkdir -p /etc/nginx/conf.d
+sudo cp proxy/dist/*.conf /etc/nginx/conf.d/
 
-# Start PostgreSQL and Drizzle Gateway
-docker compose -f compose.postgres.yml --env-file .env up -d
+# Verify nginx configuration
+sudo nginx -t
 
-# Wait for database to be ready
-sleep 30
+# Restart nginx
+sudo systemctl restart nginx
 
-# Allow otel to get metrics from prosody
-docker network inspect proxy-network | grep "subnet" -i
-vi .env
-# PROSODY_TRUSTED_PROXIES_CIDR <-- Update this value.
-
-# Keycloak (depends on PostgreSQL)
-docker compose -f keycloak-scripts/compose.yml --env-file .env up -d
-
-# Prosody + Jicofo
-docker compose -f config/compose.yml --env-file .env up -d
+docker compose up -d
 
 # JVB
 docker compose -f videobridge/compose.jvb.yml --env-file .env up -d
 ```
+
+## Nginx Configuration Setup
+
+### 1. Install Nginx
+
+On Ubuntu/Debian:
+```bash
+sudo apt update
+sudo apt install nginx
+```
+
+On CentOS/RHEL:
+```bash
+sudo yum install epel-release
+sudo yum install nginx
+```
+
+### 2. Configure Nginx
+
+Edit the main nginx configuration file (`/etc/nginx/nginx.conf`) and add:
+
+```nginx
+# Include our compiled configuration files
+include /etc/nginx/conf.d/*.conf;
+```
+
+### 3. SSL Certificate Setup
+
+Generate SSL certificates for your domains:
+
+```bash
+# Create certificate directory
+sudo mkdir -p /etc/ssl/certs /etc/ssl/private
+
+# Generate self-signed certificates (for testing)
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/ssl/private/{{YOUR_DOMAIN}}.key \
+  -out /etc/ssl/certs/{{YOUR_DOMAIN}}.crt \
+  -subj "/CN={{YOUR_DOMAIN}}"
+
+# Generate DH parameters (optional but recommended)
+sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 4096
+```
+
+### 4. Environment Variables
+
+Make sure your `.env` file contains all required variables:
+- `KC_HOSTNAME`: Keycloak domain (e.g., staj.sonacove.com)
+- `XMPP_DOMAIN`: XMPP domain (e.g., staj.sonacove.com)
+
+### 5. Recompile When Environment Changes
+
+Whenever you update your `.env` file, recompile the nginx configurations:
+
+```bash
+bun run compile-nginx
+sudo cp proxy/dist/*.conf /etc/nginx/conf.d/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+## Configuration Files
+
+The following configuration files are generated in `proxy/dist/`:
+- `nginx.conf` - Main nginx configuration
+- `ssl.conf` - SSL/TLS settings
+- `keycloak.conf` - Keycloak reverse proxy
+- `prosody.conf` - Prosody XMPP server
+- `videobridge.conf` - Jitsi Videobridge
+- `postgres.conf` - PostgreSQL TCP proxy
 
 # Migration Guide
 
