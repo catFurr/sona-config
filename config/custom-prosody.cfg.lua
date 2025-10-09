@@ -112,6 +112,7 @@ Component "conference.{{ .Env.XMPP_DOMAIN }}" "muc"
         "muc_hide_all";
         "muc_rate_limit";
         "muc_max_occupants";
+        "muc_displayname";
 
         "meeting_host";
     }

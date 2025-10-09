@@ -130,3 +130,10 @@ const db = drizzle(client);
    - **Password**: Your `KC_DB_PASSWORD` value
    - **Database**: `keycloak`
    - **SSL**: Disable (internal network communication)
+
+
+## Backup the database
+
+```bash
+docker exec postgres pg_dumpall -U keycloak > backup_$(date +%Y%m%d_%H%M%S).sql
+```
