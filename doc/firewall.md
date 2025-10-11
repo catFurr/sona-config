@@ -15,3 +15,16 @@ sudo ufw allow 8443/tcp  # studio
 sudo ufw enable
 sudo ufw status verbose
 ```
+
+
+### TCP connection tuning to detect dead participants
+
+Add to /etc/sysctl.conf
+
+```
+# OS TCP keepalive (moderate)
+net.ipv4.tcp_keepalive_time=15
+net.ipv4.tcp_keepalive_intvl=5
+net.ipv4.tcp_keepalive_probes=3
+```
+
