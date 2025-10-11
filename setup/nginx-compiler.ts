@@ -1,28 +1,38 @@
 #!/usr/bin/env bun
 
-import { mkdir, writeFile, readFile, exists, rm } from "fs/promises";
+import { $ } from "bun";
 import { join, dirname } from "path";
-import { exec } from "child_process";
-import { promisify } from "util";
 import { fileURLToPath } from "url";
 
 // Compiles nginx config files and outputs them directly to /etc/nginx/conf.d/
 // with warnings before replacing existing files
 
-
-const execAsync = promisify(exec);
-
 // Get the absolute path to this file
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Get sudo permission at the start
+async function getSudoPermission() {
+  console.log('🔐 Requesting sudo permission...');
+  try {
+    await $`sudo -v`;
+    console.log('✅ Sudo permission granted');
+  } catch (error) {
+    console.error('❌ Failed to get sudo permission:', error);
+    process.exit(1);
+  }
+}
 
 async function checkAndWarnExistingFiles(outputDir: string, configFiles: string[]): Promise<void> {
   const existingFiles: string[] = [];
   
   for (const configFile of configFiles) {
     const outputPath = join(outputDir, configFile);
-    if (await exists(outputPath)) {
+    try {
+      await $`test -f ${outputPath}`;
       existingFiles.push(configFile);
+    } catch {
+      // File doesn't exist, continue
     }
   }
   
@@ -38,79 +48,52 @@ async function checkAndWarnExistingFiles(outputDir: string, configFiles: string[
   }
 }
 
-async function loadFromEnvFile(
-    envFilePath: string,
-    envVars: Record<string, string>
-  ): Promise<number> {
-    if (!(await exists(envFilePath))) {
-      console.log("   ⚠️  No .env file found, using empty environment");
-      return 0;
-    }
-
-    const envContent = await readFile(envFilePath, "utf-8");
-    const envLines = envContent
-      .split("\n")
-      .filter((line) => line.trim() && !line.trim().startsWith("#"));
-
-    let loadedCount = 0;
-    for (const line of envLines) {
-      const [key, ...valueParts] = line.split("=");
-      if (key && valueParts.length > 0) {
-        const trimmedKey = key.trim();
-        const value = valueParts.join("=").replace(/^["']|["']$/g, "").trim();
-        envVars[trimmedKey] = value;
-        loadedCount++;
-        console.log(`   📋 Loaded from .env: ${trimmedKey} = "${value}"`);
-      }
-    }
-    return loadedCount;
+// Check if .env file exists
+async function checkEnvFile(): Promise<boolean> {
+  try {
+    await $`test -f .env`;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function compileNginxConfig(
   templatePath: string,
-  outputPath: string,
-  envVars: Record<string, string>
+  outputPath: string
 ): Promise<void> {
   console.log(`🐳 Compiling ${templatePath}...`);
 
   // Create random temp directory, delete before exiting
   const tempDir = "./temp-work/" + Math.random().toString(36).substring(2, 15);
-  await mkdir(tempDir, { recursive: true });
-
-  // Create environment file for Docker
-  const envContent = Object.entries(envVars)
-    .map(([key, value]) => `${key}=${value}`)
-    .join("\n");
-
-  const envFile = join(tempDir, ".env");
-  await writeFile(envFile, envContent);
+  await $`mkdir -p ${tempDir}`;
 
   // Copy the template file to temp directory
   const tempTemplatePath = join(tempDir, "nginx.conf.template");
-  const templateContent = await readFile(templatePath, "utf-8");
-  await writeFile(tempTemplatePath, templateContent);
+  await $`cp ${templatePath} ${tempTemplatePath}`;
 
   try {
-    // Run tpl command in jitsi/base container
-    const dockerCommand = `docker run --rm \\
-      -v "${process.cwd()}/${tempDir}:/work" \\
-      --env-file "${process.cwd()}/${envFile}" \\
-      --entrypoint="" \\
-      jitsi/base:stable \\
+    // Run tpl command in jitsi/base container using Bun Shell
+    // Docker will automatically load .env file from current directory
+    console.log("   🔧 Running tpl command in Docker container...");
+    
+    await $`docker run --rm \
+      -v "${process.cwd()}/${tempDir}:/work" \
+      --env-file .env \
+      --entrypoint="" \
+      jitsi/base:stable \
       sh -c "cd /work && tpl nginx.conf.template > nginx.conf.compiled"`;
 
-    console.log("   🔧 Running tpl command in Docker container...");
-    await execAsync(dockerCommand);
-
-    // Move compiled file to desired output location
+    // Check if compiled file was created
     const compiledPath = join(tempDir, "nginx.conf.compiled");
-    if (!(await exists(compiledPath))) {
+    try {
+      await $`test -f ${compiledPath}`;
+    } catch {
       throw new Error("Compiled config file was not created");
     }
 
-    // Copy to final location
-    const compiledContent = await readFile(compiledPath, "utf-8");
-    await writeFile(outputPath, compiledContent);
+    // Copy to final location using sudo
+    await $`sudo cp ${compiledPath} ${outputPath}`;
 
     console.log(`   ✅ Config compiled successfully to ${outputPath}`);
   } catch (error) {
@@ -120,7 +103,7 @@ async function compileNginxConfig(
     );
   } finally {
     // Delete temp directory
-    await rm(tempDir, { recursive: true });
+    await $`rm -rf ${tempDir}`;
   }
 }
 
@@ -128,15 +111,20 @@ async function main(): Promise<void> {
   console.log("🚀 Starting nginx config compilation...\n");
 
   try {
-    // Load environment variables from .env file
-    const envVars: Record<string, string> = {};
-    const envFilePath = join(__dirname, "../.env");
-    const loadedCount = await loadFromEnvFile(envFilePath, envVars);
-    console.log(`   ✅ Loaded ${loadedCount} environment variables\n`);
+    // Get sudo permission for writing to /etc/nginx
+    await getSudoPermission();
+
+    // Check if .env file exists (Bun automatically loads it)
+    const envExists = await checkEnvFile();
+    if (envExists) {
+      console.log("   ✅ .env file found - Bun will automatically load environment variables\n");
+    } else {
+      console.log("   ⚠️  No .env file found - using empty environment\n");
+    }
 
     // Set output directory to /etc/nginx/conf.d/
     const outputDir = "/etc/nginx/conf.d";
-    await mkdir(outputDir, { recursive: true });
+    await $`sudo mkdir -p ${outputDir}`;
 
     // Process all *.conf files in the proxy folder
     const proxyDir = join(__dirname, "../proxy");
@@ -152,10 +140,11 @@ async function main(): Promise<void> {
       const templatePath = join(proxyDir, configFile);
       const outputPath = join(outputDir, configFile);
 
-      if (await exists(templatePath)) {
-        await compileNginxConfig(templatePath, outputPath, envVars);
+      try {
+        await $`test -f ${templatePath}`;
+        await compileNginxConfig(templatePath, outputPath);
         console.log();
-      } else {
+      } catch {
         console.log(`   ⚠️  Skipping ${configFile} - file not found`);
       }
     }
