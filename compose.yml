@@ -25,7 +25,7 @@ x-common-environment: &common-environment
     - KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak
     - KC_BOOTSTRAP_ADMIN_USER=${KC_ADMIN_USER}
     - KC_BOOTSTRAP_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD}
-    - KC_HOSTNAME=${KC_HOSTNAME} # e.g., staj.sonacove.com
+    - KC_HOSTNAME=${KC_HOSTNAME} # e.g., auth.sonacove.com
     - KC_HOSTNAME_STRICT=true
     - KC_HTTP_ENABLED=true # Keycloak runs on HTTP, nginx handles HTTPS
     - KC_PROXY_HEADERS=xforwarded
@@ -93,7 +93,7 @@ services:
     labels:
       - "app=postgres"
     ports:
-      - 5432
+      - "0.0.0.0:5432:5432"
 
 
   drizzle-gateway:
@@ -112,7 +112,7 @@ services:
     labels:
       - "app=drizzle-gateway"
     ports:
-      - 4983
+      - "127.0.0.1:4983:4983"
 
 
   keycloak:
@@ -144,9 +144,8 @@ services:
     labels:
       - "app=keycloak"
     ports:
-      - "3000:8080"
-    expose:
-      - 9000
+      - "127.0.0.1:3000:8080"
+      - "127.0.0.1:9000:9000"
 
 
   keycloak-webhook-setup:
@@ -154,10 +153,11 @@ services:
       context: ./keycloak/setup
       dockerfile: Dockerfile
     container_name: keycloak-webhook-setup
+    restart: no
     depends_on:
       keycloak:
         condition: service_healthy
-    <<: [*common-config, *common-environment]
+    <<: [*common-environment]
     labels:
       - "app=keycloak-webhook-setup"
 
@@ -188,11 +188,11 @@ services:
       - "app=prosody"
     ports:
       # XMPP TCP client port for remote jvbs
-      - "5222:5222"
+      - "0.0.0.0:5222:5222"
       # - "5269"  # S2S
-      - "5347" # Component protocol
+      - "127.0.0.1:5347:5347" # Component protocol
       # XMPP client port proxied by nginx (BOSH, Websockets)
-      - "5280"
+      - "127.0.0.1:5280:5280"
 
 
   jicofo:
@@ -216,7 +216,7 @@ services:
       - "app=jicofo"
     ports:
       # REST including metrics, conference-request, etc.
-      - "8888"
+      - "127.0.0.1:8888:8888"
 
 
 volumes:
