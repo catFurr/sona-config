@@ -6,11 +6,37 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { fileURLToPath } from "url";
 
+// Compiles nginx config files and outputs them directly to /etc/nginx/conf.d/
+// with warnings before replacing existing files
+
+
 const execAsync = promisify(exec);
 
 // Get the absolute path to this file
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+async function checkAndWarnExistingFiles(outputDir: string, configFiles: string[]): Promise<void> {
+  const existingFiles: string[] = [];
+  
+  for (const configFile of configFiles) {
+    const outputPath = join(outputDir, configFile);
+    if (await exists(outputPath)) {
+      existingFiles.push(configFile);
+    }
+  }
+  
+  if (existingFiles.length > 0) {
+    console.log("⚠️  WARNING: The following files already exist and will be replaced:");
+    existingFiles.forEach(file => console.log(`   - ${file}`));
+    console.log(`   📁 Target directory: ${outputDir}`);
+    console.log("   Press Ctrl+C to cancel, or wait 5 seconds to continue...\n");
+    
+    // Wait 5 seconds to allow user to cancel
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    console.log("   ✅ Continuing with file replacement...\n");
+  }
+}
 
 async function loadFromEnvFile(
     envFilePath: string,
@@ -108,23 +134,23 @@ async function main(): Promise<void> {
     const loadedCount = await loadFromEnvFile(envFilePath, envVars);
     console.log(`   ✅ Loaded ${loadedCount} environment variables\n`);
 
-    // Create dist directory if it doesn't exist
-    const distDir = join(__dirname, "../proxy/dist");
-    await mkdir(distDir, { recursive: true });
+    // Set output directory to /etc/nginx/conf.d/
+    const outputDir = "/etc/nginx/conf.d";
+    await mkdir(outputDir, { recursive: true });
 
     // Process all *.conf files in the proxy folder
     const proxyDir = join(__dirname, "../proxy");
     const configFiles = [
-      "nginx.conf",
-      "keycloak.conf",
-      "postgres.conf",
-      "prosody.conf",
-      "videobridge.conf"
+      "general.conf",
+      "services.conf",
     ];
+
+    // Check for existing files and warn user
+    await checkAndWarnExistingFiles(outputDir, configFiles);
 
     for (const configFile of configFiles) {
       const templatePath = join(proxyDir, configFile);
-      const outputPath = join(distDir, configFile);
+      const outputPath = join(outputDir, configFile);
 
       if (await exists(templatePath)) {
         await compileNginxConfig(templatePath, outputPath, envVars);
@@ -135,7 +161,7 @@ async function main(): Promise<void> {
     }
 
     console.log("✨ All nginx config files compiled successfully!");
-    console.log(`📁 Output directory: ${distDir}`);
+    console.log(`📁 Output directory: ${outputDir}`);
 
   } catch (error) {
     console.error("❌ Error during nginx config compilation:", error);

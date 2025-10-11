@@ -146,7 +146,7 @@ class ConfigSyncManager {
       await this.downloadResources();
 
       // Step 2: Load environment variables and compile config
-      await this.compileConfig();
+      // await this.compileConfig();
 
       // Step 3: Compare and update custom config
       // await this.compareConfigs();
