@@ -11,6 +11,7 @@ sudo ufw allow 443/tcp
 sudo ufw allow 5222/tcp  # prosody
 sudo ufw allow 5432/tcp  # postgres
 sudo ufw allow 8443/tcp  # studio
+sudo ufw allow 10000/udp  # jvb
 
 sudo ufw enable
 sudo ufw status verbose
