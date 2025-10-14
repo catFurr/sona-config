@@ -1,0 +1,158 @@
+---
+# Certbot role - SSL certificate management with webroot plugin
+- name: Install Certbot
+  ansible.builtin.package:
+    name:
+      - certbot
+      - python3-certbot-nginx
+    state: present
+
+- name: Create Certbot webroot directory
+  ansible.builtin.file:
+    path: /var/www/html/.well-known/acme-challenge
+    state: directory
+    mode: '0755'
+    owner: www-data
+    group: www-data
+
+- name: Generate DH parameters
+  ansible.builtin.command: openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048
+  args:
+    creates: /etc/ssl/certs/dhparam.pem
+  notify: reload nginx
+
+- name: Check if XMPP domain certificate exists
+  ansible.builtin.stat:
+    path: /etc/letsencrypt/live/{{ vault_xmpp_domain }}/fullchain.pem
+  register: xmpp_cert_exists
+
+- name: Obtain certificate for XMPP domain
+  community.crypto.acme_certificate:
+    account_email: "{{ vault_acme_email }}"
+    acme_directory: https://acme-v02.api.letsencrypt.org/directory
+    acme_version: 2
+    challenge: http-01
+    csr: "{{ lookup('file', '/tmp/xmpp.csr') if xmpp_csr_created else omit }}"
+    dest: /etc/letsencrypt/live/{{ vault_xmpp_domain }}/cert.pem
+    fullchain_dest: /etc/letsencrypt/live/{{ vault_xmpp_domain }}/fullchain.pem
+    key_dest: /etc/letsencrypt/live/{{ vault_xmpp_domain }}/privkey.pem
+    remaining_days: 30
+    webroot_path: /var/www/html
+    subject_alt_name:
+      - "{{ vault_xmpp_domain }}"
+  when: not xmpp_cert_exists.stat.exists
+  register: xmpp_cert_result
+
+- name: Check if KC hostname certificate exists (when different from XMPP domain)
+  ansible.builtin.stat:
+    path: /etc/letsencrypt/live/{{ vault_kc_hostname }}/fullchain.pem
+  register: kc_cert_exists
+  when: vault_kc_hostname != vault_xmpp_domain
+
+- name: Obtain certificate for KC hostname
+  community.crypto.acme_certificate:
+    account_email: "{{ vault_acme_email }}"
+    acme_directory: https://acme-v02.api.letsencrypt.org/directory
+    acme_version: 2
+    challenge: http-01
+    dest: /etc/letsencrypt/live/{{ vault_kc_hostname }}/cert.pem
+    fullchain_dest: /etc/letsencrypt/live/{{ vault_kc_hostname }}/fullchain.pem
+    key_dest: /etc/letsencrypt/live/{{ vault_kc_hostname }}/privkey.pem
+    remaining_days: 30
+    webroot_path: /var/www/html
+    subject_alt_name:
+      - "{{ vault_kc_hostname }}"
+  when: vault_kc_hostname != vault_xmpp_domain and not kc_cert_exists.stat.exists
+  register: kc_cert_result
+
+- name: Check if PostHog domain certificate exists
+  ansible.builtin.stat:
+    path: /etc/letsencrypt/live/{{ vault_posthog_domain }}/fullchain.pem
+  register: posthog_cert_exists
+  when: vault_posthog_domain is defined
+
+- name: Obtain certificate for PostHog domain
+  community.crypto.acme_certificate:
+    account_email: "{{ vault_acme_email }}"
+    acme_directory: https://acme-v02.api.letsencrypt.org/directory
+    acme_version: 2
+    challenge: http-01
+    dest: /etc/letsencrypt/live/{{ vault_posthog_domain }}/cert.pem
+    fullchain_dest: /etc/letsencrypt/live/{{ vault_posthog_domain }}/fullchain.pem
+    key_dest: /etc/letsencrypt/live/{{ vault_posthog_domain }}/privkey.pem
+    remaining_days: 30
+    webroot_path: /var/www/html
+    subject_alt_name:
+      - "{{ vault_posthog_domain }}"
+  when: vault_posthog_domain is defined and not posthog_cert_exists.stat.exists
+  register: posthog_cert_result
+
+- name: Create symbolic link for XMPP domain certificate
+  ansible.builtin.file:
+    src: /etc/letsencrypt/live/{{ vault_xmpp_domain }}/fullchain.pem
+    dest: /etc/ssl/certs/{{ vault_xmpp_domain }}.crt
+    state: link
+    force: true
+  notify: reload nginx
+
+- name: Create symbolic link for XMPP domain private key
+  ansible.builtin.file:
+    src: /etc/letsencrypt/live/{{ vault_xmpp_domain }}/privkey.pem
+    dest: /etc/ssl/private/{{ vault_xmpp_domain }}.key
+    state: link
+    force: true
+    mode: '0600'
+  notify: reload nginx
+
+- name: Create symbolic link for KC hostname certificate (when different)
+  ansible.builtin.file:
+    src: /etc/letsencrypt/live/{{ vault_kc_hostname }}/fullchain.pem
+    dest: /etc/ssl/certs/{{ vault_kc_hostname }}.crt
+    state: link
+    force: true
+  notify: reload nginx
+  when: vault_kc_hostname != vault_xmpp_domain
+
+- name: Create symbolic link for KC hostname private key (when different)
+  ansible.builtin.file:
+    src: /etc/letsencrypt/live/{{ vault_kc_hostname }}/privkey.pem
+    dest: /etc/ssl/private/{{ vault_kc_hostname }}.key
+    state: link
+    force: true
+    mode: '0600'
+  notify: reload nginx
+  when: vault_kc_hostname != vault_xmpp_domain
+
+- name: Create symbolic link for PostHog domain certificate
+  ansible.builtin.file:
+    src: /etc/letsencrypt/live/{{ vault_posthog_domain }}/fullchain.pem
+    dest: /etc/ssl/certs/{{ vault_posthog_domain }}.crt
+    state: link
+    force: true
+  notify: reload nginx
+  when: vault_posthog_domain is defined
+
+- name: Create symbolic link for PostHog domain private key
+  ansible.builtin.file:
+    src: /etc/letsencrypt/live/{{ vault_posthog_domain }}/privkey.pem
+    dest: /etc/ssl/private/{{ vault_posthog_domain }}.key
+    state: link
+    force: true
+    mode: '0600'
+  notify: reload nginx
+  when: vault_posthog_domain is defined
+
+- name: Set up automatic certificate renewal
+  ansible.builtin.systemd:
+    name: certbot.timer
+    state: started
+    enabled: true
+
+- name: Test certificate renewal
+  ansible.builtin.command: certbot renew --dry-run
+  register: certbot_test
+  changed_when: false
+
+- name: Display certificate renewal test result
+  ansible.builtin.debug:
+    msg: "Certificate renewal test: {{ certbot_test.stdout_lines }}"

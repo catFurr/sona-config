@@ -1,0 +1,50 @@
+---
+# Sonacove-config role - Deploy and compile nginx configurations
+- name: Create sonacove config directory
+  ansible.builtin.file:
+    path: /opt/sonacove-config
+    state: directory
+    mode: '0755'
+    owner: "{{ sonacove_user | default('sonacove') }}"
+    group: "{{ sonacove_user | default('sonacove') }}"
+
+- name: Deploy sonacove config files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/sonacove-config/{{ item }}"
+    mode: '0644'
+    owner: "{{ sonacove_user | default('sonacove') }}"
+    group: "{{ sonacove_user | default('sonacove') }}"
+  loop:
+    - package.json
+    - bun.lock
+    - tsconfig.json
+    - setup/nginx-compiler.ts
+    - proxy/general.conf
+    - proxy/services.conf
+    - proxy/posthog.conf
+
+- name: Install Bun dependencies
+  ansible.builtin.shell: |
+    cd /opt/sonacove-config
+    bun install --frozen-lockfile
+  become_user: "{{ sonacove_user | default('sonacove') }}"
+  args:
+    creates: /opt/sonacove-config/node_modules
+
+- name: Compile nginx configurations
+  ansible.builtin.shell: |
+    cd /opt/sonacove-config
+    bun setup/nginx-compiler.ts
+  become_user: "{{ sonacove_user | default('sonacove') }}"
+  register: nginx_compile_result
+  changed_when: nginx_compile_result.rc == 0
+
+- name: Verify nginx configuration
+  ansible.builtin.command: nginx -t
+  register: nginx_test_result
+  changed_when: false
+
+- name: Display nginx test result
+  ansible.builtin.debug:
+    msg: "{{ nginx_test_result.stdout_lines }}"

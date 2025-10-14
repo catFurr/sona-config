@@ -1,0 +1,3 @@
+# Create this file with your vault password
+# Example: echo "your_secure_password_here" > .vault_pass
+# chmod 600 .vault_pass

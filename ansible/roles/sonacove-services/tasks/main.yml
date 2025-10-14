@@ -1,0 +1,122 @@
+---
+# Sonacove-services role - Docker Compose service orchestration
+- name: Create sonacove services directory
+  ansible.builtin.file:
+    path: /opt/sonacove-services
+    state: directory
+    mode: '0755'
+    owner: "{{ sonacove_user | default('sonacove') }}"
+    group: "{{ sonacove_user | default('sonacove') }}"
+
+- name: Deploy Docker Compose files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/sonacove-services/{{ item }}"
+    mode: '0644'
+    owner: "{{ sonacove_user | default('sonacove') }}"
+    group: "{{ sonacove_user | default('sonacove') }}"
+  loop:
+    - compose.yml
+    - videobridge/compose.jvb.yml
+    - videobridge/custom-jvb.conf
+    - videobridge/custom-logging.properties
+
+- name: Deploy Keycloak configuration files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/sonacove-services/{{ item }}"
+    mode: '0644'
+    owner: "{{ sonacove_user | default('sonacove') }}"
+    group: "{{ sonacove_user | default('sonacove') }}"
+  loop:
+    - keycloak/Dockerfile
+    - keycloak/entrypoint.sh
+    - keycloak/realm-export.json
+    - keycloak/setup/Dockerfile
+    - keycloak/setup/registration-api-validator.js
+    - keycloak/setup/token-map-fullname.js
+
+- name: Deploy Prosody configuration files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/sonacove-services/{{ item }}"
+    mode: '0644'
+    owner: "{{ sonacove_user | default('sonacove') }}"
+    group: "{{ sonacove_user | default('sonacove') }}"
+  loop:
+    - prosody/custom-prosody.cfg.lua
+    - prosody/custom-prosodyBase.cfg.lua
+    - prosody/custom-jicofo.conf
+    - prosody/custom-logging.properties
+    - prosody/plugins/token/util.lib.lua
+    - prosody/plugins/luajwtjitsi.lib.lua
+
+- name: Deploy other configuration files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/sonacove-services/{{ item }}"
+    mode: '0644'
+    owner: "{{ sonacove_user | default('sonacove') }}"
+    group: "{{ sonacove_user | default('sonacove') }}"
+  loop:
+    - init-db.sql
+    - otel-config.yml
+
+- name: Create SSL certificates directory for Prosody
+  ansible.builtin.file:
+    path: /opt/sonacove-services/prosody/certs
+    state: directory
+    mode: '0755'
+    owner: "{{ sonacove_user | default('sonacove') }}"
+    group: "{{ sonacove_user | default('sonacove') }}"
+
+- name: Copy SSL certificates to Prosody directory
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "/opt/sonacove-services/prosody/certs/{{ item.dest }}"
+    mode: '0644'
+    owner: "{{ sonacove_user | default('sonacove') }}"
+    group: "{{ sonacove_user | default('sonacove') }}"
+    remote_src: true
+  loop:
+    - { src: "/etc/ssl/certs/{{ vault_xmpp_domain }}.crt", dest: "{{ vault_xmpp_domain }}.crt" }
+    - { src: "/etc/ssl/private/{{ vault_xmpp_domain }}.key", dest: "{{ vault_xmpp_domain }}.key" }
+  notify: restart docker services
+
+- name: Start main Docker Compose services
+  community.docker.docker_compose_v2:
+    project_src: /opt/sonacove-services
+    state: present
+    pull: true
+    recreate: always
+  become_user: "{{ sonacove_user | default('sonacove') }}"
+  register: main_services_result
+
+- name: Start videobridge Docker Compose services
+  community.docker.docker_compose_v2:
+    project_src: /opt/sonacove-services/videobridge
+    state: present
+    pull: true
+    recreate: always
+  become_user: "{{ sonacove_user | default('sonacove') }}"
+  register: videobridge_services_result
+
+- name: Wait for services to be healthy
+  ansible.builtin.wait_for:
+    port: "{{ item.port }}"
+    host: "{{ item.host }}"
+    timeout: 60
+  loop:
+    - { port: 3000, host: "127.0.0.1" }  # Keycloak
+    - { port: 5280, host: "127.0.0.1" }  # Prosody
+    - { port: 8888, host: "127.0.0.1" }  # Jicofo
+    - { port: 8080, host: "127.0.0.1" }  # JVB
+
+- name: Verify Docker containers are running
+  ansible.builtin.command: docker ps --format "table {{.Names}}\t{{.Status}}"
+  register: docker_ps_result
+  changed_when: false
+
+- name: Display running containers
+  ansible.builtin.debug:
+    msg: "{{ docker_ps_result.stdout_lines }}"

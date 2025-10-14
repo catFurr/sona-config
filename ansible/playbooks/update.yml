@@ -1,0 +1,45 @@
+---
+# Update playbook - Update existing Sonacove installations
+# Usage: ansible-playbook -i inventory/staging playbooks/update.yml
+
+- name: Update Sonacove infrastructure
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    sonacove_user: "sonacove"
+  roles:
+    - role: sonacove-config
+      tags: [sonacove-config, update]
+    
+    - role: certbot
+      tags: [certbot, update]
+    
+    - role: sonacove-services
+      tags: [sonacove-services, update]
+
+  post_tasks:
+    - name: Verify all services are healthy after update
+      ansible.builtin.wait_for:
+        port: "{{ item.port }}"
+        host: "{{ item.host }}"
+        timeout: 30
+      loop:
+        - { port: 80, host: "127.0.0.1" }   # Nginx HTTP
+        - { port: 443, host: "127.0.0.1" }  # Nginx HTTPS
+        - { port: 3000, host: "127.0.0.1" } # Keycloak
+        - { port: 5280, host: "127.0.0.1" } # Prosody
+        - { port: 8888, host: "127.0.0.1" } # Jicofo
+        - { port: 8080, host: "127.0.0.1" } # JVB
+
+    - name: Display update summary
+      ansible.builtin.debug:
+        msg: |
+          ✅ Sonacove infrastructure updated successfully!
+          
+          Updated components:
+          - Nginx configuration
+          - SSL certificates (if needed)
+          - Docker services
+          
+          All services are running and healthy.

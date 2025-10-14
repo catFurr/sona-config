@@ -25,6 +25,10 @@ sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 
 ### 3. SSL Certificate Setup
 
+**With Ansible (Recommended):**
+SSL certificates are automatically managed by the `certbot` role using Let's Encrypt with the webroot plugin. This avoids port conflicts and provides automatic renewal.
+
+**Manual Setup (Legacy):**
 Generate SSL certificates for your domains:
 
 ```bash

@@ -1,0 +1,9 @@
+---
+# Handlers for Certbot role
+- name: reload nginx
+  ansible.builtin.systemd:
+    name: nginx
+    state: reloaded
+
+- name: renew certificates
+  ansible.builtin.command: certbot renew --quiet

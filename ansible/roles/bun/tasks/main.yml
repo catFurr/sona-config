@@ -1,0 +1,42 @@
+---
+# Bun role - Install Bun runtime
+- name: Check if Bun is already installed
+  ansible.builtin.command: bun --version
+  register: bun_check
+  failed_when: false
+  changed_when: false
+
+- name: Download and install Bun
+  ansible.builtin.shell: |
+    curl -fsSL https://bun.sh/install | bash
+  args:
+    creates: /home/{{ ansible_user }}/.bun/bin/bun
+  when: bun_check.rc != 0
+
+- name: Add Bun to PATH for current user
+  ansible.builtin.lineinfile:
+    path: "/home/{{ ansible_user }}/.bashrc"
+    line: 'export PATH="$HOME/.bun/bin:$PATH"'
+    create: true
+
+- name: Add Bun to PATH for sonacove user
+  ansible.builtin.lineinfile:
+    path: "/home/{{ sonacove_user | default('sonacove') }}/.bashrc"
+    line: 'export PATH="$HOME/.bun/bin:$PATH"'
+    create: true
+
+- name: Create symlink for Bun in /usr/local/bin
+  ansible.builtin.file:
+    src: "/home/{{ ansible_user }}/.bun/bin/bun"
+    dest: /usr/local/bin/bun
+    state: link
+    force: true
+
+- name: Verify Bun installation
+  ansible.builtin.command: bun --version
+  register: bun_version
+  changed_when: false
+
+- name: Display Bun version
+  ansible.builtin.debug:
+    msg: "Bun {{ bun_version.stdout }} installed successfully"

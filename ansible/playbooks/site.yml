@@ -1,0 +1,13 @@
+---
+# Main orchestration playbook for Sonacove infrastructure
+# Usage:
+#   ansible-playbook -i inventory/staging playbooks/site.yml --tags provision
+#   ansible-playbook -i inventory/production playbooks/site.yml --tags update
+
+- name: Provision new Sonacove server
+  import_playbook: provision.yml
+  tags: [provision, never]
+
+- name: Update existing Sonacove server
+  import_playbook: update.yml
+  tags: [update, never]
