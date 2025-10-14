@@ -131,6 +131,7 @@ async function main(): Promise<void> {
     const configFiles = [
       "general.conf",
       "services.conf",
+      "posthog.conf",
     ];
 
     // Check for existing files and warn user

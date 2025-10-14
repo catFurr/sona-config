@@ -17,6 +17,15 @@ async function certsExist(xmppDomain: string): Promise<boolean> {
   }
 }
 
+async function certsExistForDomain(domain: string): Promise<boolean> {
+  try {
+    const result = await $`test -f /etc/letsencrypt/live/${domain}/fullchain.pem`.nothrow();
+    return result.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
 // Get sudo permission at the start
 async function getSudoPermission() {
   console.log('🔐 Requesting sudo permission...');
@@ -71,6 +80,11 @@ async function generateDhParams() {
   console.log('🔐 Generating DH parameters...');
   
   try {
+    const exists = await $`test -f /etc/ssl/certs/dhparam.pem`.nothrow();
+    if (exists.exitCode === 0) {
+      console.log('ℹ️  DH parameters already exist, skipping');
+      return;
+    }
     await $`sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048`;
     console.log('✅ DH parameters generated successfully');
   } catch (error) {
@@ -118,6 +132,7 @@ async function main() {
   try {
     // Get XMPP domain from environment (Bun automatically loads .env files)
     const xmppDomain = process.env.XMPP_DOMAIN;
+    const posthogDomain = process.env.POSTHOG_DOMAIN; // e.g., e.sonacove.com
     
     if (!xmppDomain) {
       console.error('❌ XMPP_DOMAIN not found in environment variables. Make sure .env file exists and contains XMPP_DOMAIN');
@@ -125,6 +140,11 @@ async function main() {
     }
     
     console.log(`📋 Using XMPP domain: ${xmppDomain}`);
+    if (posthogDomain) {
+      console.log(`📋 Using PostHog proxy domain: ${posthogDomain}`);
+    } else {
+      console.log('ℹ️  POSTHOG_DOMAIN not set; skipping PostHog certificate provisioning');
+    }
     
     // Get sudo permission
     await getSudoPermission();
@@ -133,19 +153,27 @@ async function main() {
     const certsAlreadyExist = await certsExist(xmppDomain);
     
     if (certsAlreadyExist) {
-      console.log('ℹ️  Certificates already exist, skipping certificate generation steps');
+      console.log('ℹ️  Certificates already exist for XMPP domain, skipping certificate generation steps');
     } else {
-      console.log('ℹ️  Certificates not found, will generate new ones');
-      
-      // Step 1: Generate certificate
+      console.log('ℹ️  Certificates not found for XMPP domain, will generate new ones');
       await generateCertificate(xmppDomain);
-      
-      // Step 2: Create SSL symbolic links
       await createSslSymlinks(xmppDomain);
-      
-      // Step 3: Generate DH parameters
-      await generateDhParams();
     }
+
+    // Provision PostHog domain certs if configured
+    if (posthogDomain) {
+      const posthogCertsExist = await certsExistForDomain(posthogDomain);
+      if (posthogCertsExist) {
+        console.log('ℹ️  Certificates already exist for PostHog domain, skipping');
+      } else {
+        console.log('ℹ️  Certificates not found for PostHog domain, will generate');
+        await generateCertificate(posthogDomain);
+        await createSslSymlinks(posthogDomain);
+      }
+    }
+    
+    // Generate DH params if missing
+    await generateDhParams();
     
     // Step 4: Reload NGINX
     await reloadNginx();
