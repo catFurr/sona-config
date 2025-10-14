@@ -24,9 +24,9 @@ http_default_host = "{{ .Env.XMPP_DOMAIN }}"
 
 
 -- https://prosody.im/doc/modules/mod_smacks
-smacks_max_unacked_stanzas = 10;
+smacks_max_unacked_stanzas = 5;
 smacks_hibernation_time = 60;
-smacks_max_old_sessions = 1;
+smacks_max_old_sessions = 10;  -- Increased from 1 to allow more session resumptions
 
 
 VirtualHost "{{ .Env.XMPP_DOMAIN }}"
