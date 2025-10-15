@@ -13,6 +13,16 @@
     creates: /home/{{ ansible_user }}/.bun/bin/bun
   when: bun_check.rc != 0
 
+- name: Copy Bun binary to system location
+  ansible.builtin.copy:
+    src: "/home/{{ ansible_user }}/.bun/bin/bun"
+    dest: /usr/local/bin/bun
+    mode: '0755'
+    owner: root
+    group: root
+    remote_src: true
+  when: bun_check.rc != 0
+
 - name: Add Bun to PATH for current user
   ansible.builtin.lineinfile:
     path: "/home/{{ ansible_user }}/.bashrc"
@@ -22,15 +32,8 @@
 - name: Add Bun to PATH for sonacove user
   ansible.builtin.lineinfile:
     path: "/home/{{ sonacove_user | default('sonacove') }}/.bashrc"
-    line: 'export PATH="$HOME/.bun/bin:$PATH"'
+    line: 'export PATH="/usr/local/bin:$PATH"'
     create: true
-
-- name: Create symlink for Bun in /usr/local/bin
-  ansible.builtin.file:
-    src: "/home/{{ ansible_user }}/.bun/bin/bun"
-    dest: /usr/local/bin/bun
-    state: link
-    force: true
 
 - name: Verify Bun installation
   ansible.builtin.command: bun --version

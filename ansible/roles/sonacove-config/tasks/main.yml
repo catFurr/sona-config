@@ -8,9 +8,20 @@
     owner: "{{ sonacove_user | default('sonacove') }}"
     group: "{{ sonacove_user | default('sonacove') }}"
 
+- name: Create sonacove config subdirectories
+  ansible.builtin.file:
+    path: "/opt/sonacove-config/{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: "{{ sonacove_user | default('sonacove') }}"
+    group: "{{ sonacove_user | default('sonacove') }}"
+  loop:
+    - setup
+    - proxy
+
 - name: Deploy sonacove config files
   ansible.builtin.copy:
-    src: "{{ item }}"
+    src: "/home/ibrahim/sona-config/{{ item }}"
     dest: "/opt/sonacove-config/{{ item }}"
     mode: '0644'
     owner: "{{ sonacove_user | default('sonacove') }}"
@@ -27,7 +38,7 @@
 - name: Install Bun dependencies
   ansible.builtin.shell: |
     cd /opt/sonacove-config
-    bun install --frozen-lockfile
+    /usr/local/bin/bun install --frozen-lockfile
   become_user: "{{ sonacove_user | default('sonacove') }}"
   args:
     creates: /opt/sonacove-config/node_modules
@@ -35,7 +46,7 @@
 - name: Compile nginx configurations
   ansible.builtin.shell: |
     cd /opt/sonacove-config
-    bun setup/nginx-compiler.ts
+    /usr/local/bin/bun setup/nginx-compiler.ts
   become_user: "{{ sonacove_user | default('sonacove') }}"
   register: nginx_compile_result
   changed_when: nginx_compile_result.rc == 0

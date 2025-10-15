@@ -8,9 +8,24 @@
     owner: "{{ sonacove_user | default('sonacove') }}"
     group: "{{ sonacove_user | default('sonacove') }}"
 
+- name: Create sonacove services subdirectories
+  ansible.builtin.file:
+    path: "/opt/sonacove-services/{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: "{{ sonacove_user | default('sonacove') }}"
+    group: "{{ sonacove_user | default('sonacove') }}"
+  loop:
+    - videobridge
+    - keycloak
+    - keycloak/setup
+    - prosody
+    - prosody/plugins
+    - prosody/plugins/token
+
 - name: Deploy Docker Compose files
   ansible.builtin.copy:
-    src: "{{ item }}"
+    src: "/home/ibrahim/sona-config/{{ item }}"
     dest: "/opt/sonacove-services/{{ item }}"
     mode: '0644'
     owner: "{{ sonacove_user | default('sonacove') }}"
@@ -23,7 +38,7 @@
 
 - name: Deploy Keycloak configuration files
   ansible.builtin.copy:
-    src: "{{ item }}"
+    src: "/home/ibrahim/sona-config/{{ item }}"
     dest: "/opt/sonacove-services/{{ item }}"
     mode: '0644'
     owner: "{{ sonacove_user | default('sonacove') }}"
@@ -33,12 +48,16 @@
     - keycloak/entrypoint.sh
     - keycloak/realm-export.json
     - keycloak/setup/Dockerfile
-    - keycloak/setup/registration-api-validator.js
-    - keycloak/setup/token-map-fullname.js
+    - keycloak/setup/keycloak-webhook-setup.ts
+    - keycloak/setup/package.json
+    - keycloak/setup/package-lock.json
+    - keycloak/setup/tsconfig.json
+    - keycloak/registration-api-validator.js
+    - keycloak/token-map-fullname.js
 
 - name: Deploy Prosody configuration files
   ansible.builtin.copy:
-    src: "{{ item }}"
+    src: "/home/ibrahim/sona-config/{{ item }}"
     dest: "/opt/sonacove-services/{{ item }}"
     mode: '0644'
     owner: "{{ sonacove_user | default('sonacove') }}"
@@ -53,7 +72,7 @@
 
 - name: Deploy other configuration files
   ansible.builtin.copy:
-    src: "{{ item }}"
+    src: "/home/ibrahim/sona-config/{{ item }}"
     dest: "/opt/sonacove-services/{{ item }}"
     mode: '0644'
     owner: "{{ sonacove_user | default('sonacove') }}"
@@ -61,6 +80,14 @@
   loop:
     - init-db.sql
     - otel-config.yml
+
+- name: Copy .env file for Docker Compose
+  ansible.builtin.copy:
+    src: /home/ibrahim/sona-config/.env
+    dest: /opt/sonacove-services/.env
+    mode: '0644'
+    owner: "{{ sonacove_user | default('sonacove') }}"
+    group: "{{ sonacove_user | default('sonacove') }}"
 
 - name: Create SSL certificates directory for Prosody
   ansible.builtin.file:
@@ -87,7 +114,7 @@
   community.docker.docker_compose_v2:
     project_src: /opt/sonacove-services
     state: present
-    pull: true
+    pull: always
     recreate: always
   become_user: "{{ sonacove_user | default('sonacove') }}"
   register: main_services_result
@@ -96,7 +123,7 @@
   community.docker.docker_compose_v2:
     project_src: /opt/sonacove-services/videobridge
     state: present
-    pull: true
+    pull: always
     recreate: always
   become_user: "{{ sonacove_user | default('sonacove') }}"
   register: videobridge_services_result
