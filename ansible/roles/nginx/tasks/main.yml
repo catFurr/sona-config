@@ -1,0 +1,89 @@
+---
+# Nginx role - Install and configure Nginx
+- name: Install Nginx
+  ansible.builtin.package:
+    name: nginx
+    state: present
+
+- name: Create webroot directory for Certbot
+  ansible.builtin.file:
+    path: /var/www/html
+    state: directory
+    mode: '0755'
+    owner: www-data
+    group: www-data
+
+- name: Create SSL directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  loop:
+    - /etc/ssl/certs
+    - /etc/ssl/private
+
+- name: Configure main nginx.conf
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/nginx.conf
+    backup: true
+    mode: '0644'
+  notify: reload nginx
+
+- name: Remove default nginx site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: reload nginx
+
+- name: Create nginx log directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: www-data
+    group: www-data
+  loop:
+    - /var/log/nginx/sonacove
+    - /var/log/nginx/posthog
+
+- name: Configure logrotate for nginx
+  ansible.builtin.copy:
+    content: |
+      /var/log/nginx/*.log {
+          daily
+          missingok
+          rotate 52
+          compress
+          delaycompress
+          notifempty
+          create 640 www-data adm
+          sharedscripts
+          prerotate
+              if [ -d /etc/logrotate.d/httpd-prerotate ]; then \
+                  run-parts /etc/logrotate.d/httpd-prerotate; \
+              fi \
+          endscript
+          postrotate
+              invoke-rc.d nginx rotate >/dev/null 2>&1
+          endscript
+      }
+    dest: /etc/logrotate.d/nginx
+    mode: '0644'
+
+- name: Start and enable Nginx service
+  ansible.builtin.systemd:
+    name: nginx
+    state: started
+    enabled: true
+
+- name: Verify Nginx configuration
+  ansible.builtin.command: nginx -t
+  register: nginx_test
+  changed_when: false
+
+- name: Display Nginx test result
+  ansible.builtin.debug:
+    msg: "{{ nginx_test.stdout_lines }}"

@@ -1,0 +1,15 @@
+---
+# Handlers for Sonacove-services role
+- name: restart docker services
+  community.docker.docker_compose_v2:
+    project_src: /opt/sonacove-services
+    state: present
+    recreate: always
+  become_user: "{{ sonacove_user | default('sonacove') }}"
+
+- name: restart videobridge services
+  community.docker.docker_compose_v2:
+    project_src: /opt/sonacove-services/videobridge
+    state: present
+    recreate: always
+  become_user: "{{ sonacove_user | default('sonacove') }}"

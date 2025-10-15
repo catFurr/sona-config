@@ -1,0 +1,4 @@
+---
+# Default variables for common role
+timezone: "UTC"
+sonacove_user: "sonacove"

@@ -1,0 +1,124 @@
+name: Deploy Backend Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+      - ansible
+    paths:
+      - 'ansible/**'
+      - 'prosody/**'
+      - 'proxy/**'
+      - 'videobridge/**'
+      - 'keycloak/**'
+      - 'setup/**'
+      - 'compose.yml'
+      - 'compose.*.yml'
+  pull_request:
+    branches:
+      - main
+      - ansible
+    paths:
+      - 'ansible/**'
+      - 'prosody/**'
+      - 'proxy/**'
+      - 'videobridge/**'
+      - 'keycloak/**'
+      - 'setup/**'
+      - 'compose.yml'
+      - 'compose.*.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      tags:
+        description: 'Ansible tags to run (comma-separated)'
+        required: false
+        default: 'update'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'pull_request' && 'staging' || 'production' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          
+      - name: Install Ansible
+        run: |
+          pip install ansible
+          ansible --version
+          
+      - name: Determine deployment environment
+        id: env
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "environment=staging" >> $GITHUB_OUTPUT
+            echo "inventory=staging" >> $GITHUB_OUTPUT
+            echo "host_secret=STAGING_HOST" >> $GITHUB_OUTPUT
+            echo "key_secret=STAGING_SSH_PRIVATE_KEY" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "environment=production" >> $GITHUB_OUTPUT
+            echo "inventory=production" >> $GITHUB_OUTPUT
+            echo "host_secret=PRODUCTION_HOST" >> $GITHUB_OUTPUT
+            echo "key_secret=PRODUCTION_SSH_PRIVATE_KEY" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/ansible" ]; then
+            echo "environment=staging" >> $GITHUB_OUTPUT
+            echo "inventory=staging" >> $GITHUB_OUTPUT
+            echo "host_secret=STAGING_HOST" >> $GITHUB_OUTPUT
+            echo "key_secret=STAGING_SSH_PRIVATE_KEY" >> $GITHUB_OUTPUT
+          else
+            echo "environment=staging" >> $GITHUB_OUTPUT
+            echo "inventory=staging" >> $GITHUB_OUTPUT
+            echo "host_secret=STAGING_HOST" >> $GITHUB_OUTPUT
+            echo "key_secret=STAGING_SSH_PRIVATE_KEY" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets[steps.env.outputs.key_secret] }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets[steps.env.outputs.host_secret] }} >> ~/.ssh/known_hosts
+          
+      - name: Decrypt Ansible Vault
+        run: |
+          cd ansible
+          echo "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > .vault_pass
+          chmod 600 .vault_pass
+          
+      - name: Run Ansible Playbook
+        run: |
+          cd ansible
+          TAGS="${{ github.event.inputs.tags || 'update' }}"
+          ansible-playbook -i inventory/${{ steps.env.outputs.inventory }} playbooks/site.yml --tags "$TAGS"
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: False
+          
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_rsa
+          rm -f ansible/.vault_pass
+          
+      - name: Deployment Summary
+        if: always()
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ steps.env.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Inventory**: ${{ steps.env.outputs.inventory }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Event**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY

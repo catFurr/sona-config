@@ -1,0 +1,13 @@
+---
+# Handlers for Sonacove-config role
+- name: compile nginx config
+  ansible.builtin.shell: |
+    cd /opt/sonacove-config
+    bun setup/nginx-compiler.ts
+  become_user: "{{ sonacove_user | default('sonacove') }}"
+  notify: reload nginx
+
+- name: reload nginx
+  ansible.builtin.systemd:
+    name: nginx
+    state: reloaded

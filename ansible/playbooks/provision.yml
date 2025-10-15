@@ -1,0 +1,92 @@
+---
+# Provision playbook - Complete server setup for new installations
+# Usage: ansible-playbook -i inventory/staging playbooks/provision.yml
+
+- name: Wait for cloud-init to complete
+  hosts: all
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Wait for SSH to be available
+      ansible.builtin.wait_for:
+        port: 22
+        timeout: 300
+        state: started
+        search_regex: OpenSSH
+      register: ssh_response
+      until: ssh_response
+      retries: 60
+      delay: 5
+
+    - name: Wait for cloud-init to finish
+      community.general.cloud_init_data_facts:
+        filter: status
+      register: cloud_init_status
+      until: "cloud_init_status.cloud_init_data_facts.status.v1.stage is defined and not cloud_init_status.cloud_init_data_facts.status.v1.stage"
+      retries: 360
+      delay: 5
+      ignore_errors: true
+
+- name: Provision Sonacove infrastructure
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    sonacove_user: "sonacove"
+  roles:
+    - role: common
+      tags: [common, provision]
+    
+    - role: docker
+      tags: [docker, provision]
+    
+    - role: bun
+      tags: [bun, provision]
+    
+    - role: nginx
+      tags: [nginx, provision]
+    
+    - role: certbot
+      tags: [certbot, provision]
+    
+    - role: sonacove-config
+      tags: [sonacove-config, provision]
+    
+    - role: sonacove-services
+      tags: [sonacove-services, provision]
+
+  post_tasks:
+    - name: Verify all services are healthy
+      ansible.builtin.wait_for:
+        port: "{{ item.port }}"
+        host: "{{ item.host }}"
+        timeout: 30
+      loop:
+        - { port: 80, host: "127.0.0.1" }   # Nginx HTTP
+        - { port: 443, host: "127.0.0.1" }  # Nginx HTTPS
+        - { port: 3000, host: "127.0.0.1" } # Keycloak
+        - { port: 5280, host: "127.0.0.1" } # Prosody
+        - { port: 8888, host: "127.0.0.1" } # Jicofo
+        - { port: 8080, host: "127.0.0.1" } # JVB
+
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg: |
+          🎉 Sonacove infrastructure provisioned successfully!
+          
+          Services running:
+          - Nginx (HTTP/HTTPS)
+          - Keycloak (Authentication)
+          - Prosody (XMPP)
+          - Jicofo (Conference focus)
+          - JVB (Videobridge)
+          
+          Access URLs:
+          - Main domain: https://{{ vault_xmpp_domain }}
+          - Auth: https://{{ vault_xmpp_domain }}/auth
+          - Database management: https://{{ vault_xmpp_domain }}:8443
+          
+          Next steps:
+          1. Verify SSL certificates are working
+          2. Test meeting functionality
+          3. Configure DNS if needed

@@ -1,0 +1,95 @@
+---
+# Docker role - Install Docker Engine and Docker Compose
+- name: Remove old Docker packages
+  ansible.builtin.package:
+    name:
+      - docker
+      - docker-engine
+      - docker.io
+      - containerd
+      - runc
+    state: absent
+
+- name: Add Docker GPG key
+  ansible.builtin.apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: Add Docker repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+    update_cache: true
+
+- name: Install Docker packages
+  ansible.builtin.package:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+
+- name: Start and enable Docker service
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Add current user to docker group
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true
+
+- name: Add sonacove user to docker group
+  ansible.builtin.user:
+    name: "{{ sonacove_user | default('sonacove') }}"
+    groups: docker
+    append: true
+
+- name: Configure Docker daemon
+  ansible.builtin.copy:
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "10m",
+          "max-file": "3"
+        },
+        "storage-driver": "overlay2",
+        "live-restore": true
+      }
+    dest: /etc/docker/daemon.json
+    mode: '0644'
+  notify: restart docker
+
+- name: Set fact that Docker is installed
+  ansible.builtin.set_fact:
+    docker_installed: true
+
+- name: Wait for Docker to be ready
+  ansible.builtin.wait_for:
+    port: 2376
+    host: "{{ ansible_default_ipv4.address }}"
+    timeout: 30
+  ignore_errors: true
+
+- name: Verify Docker installation
+  ansible.builtin.command: docker --version
+  register: docker_version
+  changed_when: false
+
+- name: Verify Docker Compose installation
+  ansible.builtin.command: docker compose version
+  register: docker_compose_version
+  changed_when: false
+
+- name: Display Docker version
+  ansible.builtin.debug:
+    msg: "Docker {{ docker_version.stdout }} installed successfully"
+
+- name: Display Docker Compose version
+  ansible.builtin.debug:
+    msg: "Docker Compose {{ docker_compose_version.stdout }} installed successfully"

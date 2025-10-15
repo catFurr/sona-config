@@ -1,0 +1,114 @@
+---
+# Common role - Base system setup
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install base packages
+  ansible.builtin.package:
+    name:
+      - curl
+      - git
+      - build-essential
+      - software-properties-common
+      - apt-transport-https
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - unzip
+      - wget
+      - htop
+      - vim
+    state: present
+
+- name: Set timezone
+  ansible.builtin.timezone:
+    name: "{{ timezone | default('UTC') }}"
+
+- name: Configure hostname
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+  when: hostname is defined
+
+- name: Configure sysctl for TCP keepalive
+  ansible.builtin.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+  loop:
+    - { name: "net.ipv4.tcp_keepalive_time", value: "15" }
+    - { name: "net.ipv4.tcp_keepalive_intvl", value: "5" }
+    - { name: "net.ipv4.tcp_keepalive_probes", value: "3" }
+
+- name: Configure firewall (ufw)
+  ansible.builtin.ufw:
+    state: enabled
+    policy: deny
+    direction: incoming
+
+- name: Allow SSH through firewall
+  ansible.builtin.ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+
+- name: Allow HTTP through firewall
+  ansible.builtin.ufw:
+    rule: allow
+    port: "80"
+    proto: tcp
+
+- name: Allow HTTPS through firewall
+  ansible.builtin.ufw:
+    rule: allow
+    port: "443"
+    proto: tcp
+
+- name: Allow XMPP port through firewall
+  ansible.builtin.ufw:
+    rule: allow
+    port: "5222"
+    proto: tcp
+
+- name: Allow PostgreSQL port through firewall
+  ansible.builtin.ufw:
+    rule: allow
+    port: "5432"
+    proto: tcp
+
+- name: Allow Drizzle Studio port through firewall
+  ansible.builtin.ufw:
+    rule: allow
+    port: "8443"
+    proto: tcp
+
+- name: Allow JVB UDP port through firewall
+  ansible.builtin.ufw:
+    rule: allow
+    port: "10000"
+    proto: udp
+
+- name: Create sonacove user
+  ansible.builtin.user:
+    name: "{{ sonacove_user | default('sonacove') }}"
+    comment: "Sonacove service user"
+    shell: /bin/bash
+    home: "/home/{{ sonacove_user | default('sonacove') }}"
+    state: present
+    create_home: true
+
+- name: Add sonacove user to docker group
+  ansible.builtin.user:
+    name: "{{ sonacove_user | default('sonacove') }}"
+    groups: docker
+    append: true
+  when: docker_installed is defined and docker_installed
+
+- name: Set up SSH key for sonacove user
+  ansible.builtin.authorized_key:
+    user: "{{ sonacove_user | default('sonacove') }}"
+    key: "{{ sonacove_ssh_key }}"
+    state: present
+  when: sonacove_ssh_key is defined

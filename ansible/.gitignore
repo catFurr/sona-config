@@ -1,0 +1,17 @@
+# Ansible Vault password file
+.vault_pass
+
+# Temporary files
+*.retry
+*.log
+
+# Ansible cache
+.ansible/
+
+# Local inventory overrides
+inventory/local/
+inventory/*/hosts_local.yml
+
+# Backup files
+*.bak
+*.backup
