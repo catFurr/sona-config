@@ -1,0 +1,228 @@
+
+x-common-config: &common-config
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      labels: "app"
+
+x-common-environment: &common-environment
+  environment:
+    - HOSTNAME=${SERVER_NAME}
+    - SERVER_NAME=${SERVER_NAME}
+    - ENVIRONMENT=${ENVIRONMENT:-production}
+    - REGION=${SERVER_REGION:-paris-1}
+    - GRAFANA_USERNAME=${GRAFANA_USERNAME}
+    - GRAFANA_API_KEY=${GRAFANA_API_KEY}
+    - POSTGRES_DB=keycloak
+    - POSTGRES_USER=keycloak
+    - POSTGRES_PASSWORD=${KC_DB_PASSWORD}
+    - CF_PASSWORD=${KC_DB_PASSWORD}
+    - KC_DB_USERNAME=keycloak
+    - KC_DB_PASSWORD=${KC_DB_PASSWORD}
+    - KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak
+    - KC_BOOTSTRAP_ADMIN_USER=${KC_ADMIN_USER}
+    - KC_BOOTSTRAP_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD}
+    - KC_HOSTNAME=${KC_HOSTNAME} # e.g., auth.sonacove.com
+    - KC_HOSTNAME_STRICT=true
+    - KC_HTTP_ENABLED=true # Keycloak runs on HTTP, nginx handles HTTPS
+    - KC_PROXY_HEADERS=xforwarded
+    - KC_EVENT_METRICS_USER_EVENTS=register,login,logout
+    - KC_VAULT_DIR=/opt/keycloak/vault # Tell Keycloak where the vault directory is
+      # Pass through the env vars needed by entrypoint.sh to populate vault files
+    - KC_REGISTRATION_API_URL=${KC_REGISTRATION_API_URL}
+    - KC_WEBHOOK_SECRET=${KC_WEBHOOK_SECRET}
+    - KC_CLIENT_SECRET=${KC_CLIENT_SECRET} # Client secret for realm configuration
+    - KC_REALM_NAME=${KC_REALM_NAME:-jitsi} # Pass realm name for entrypoint script
+    - KC_LOG=console
+    - KC_LOG_CONSOLE_COLOR=true
+    # - KC_LOG_CONSOLE_LEVEL=debug
+    # - KC_LOG_LEVEL=debug
+    - KEYCLOAK_BASE_URL=http://keycloak # Base hostname for Keycloak internal communication
+    - KEYCLOAK_REALM_NAME=${KC_REALM_NAME:-jitsi}
+    - KEYCLOAK_ADMIN_USER=${KC_ADMIN_USER:-temp-admin}
+    - KEYCLOAK_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD}
+    - TARGET_WEBHOOK_URL=${KC_WEBHOOK_URL:-https://sonacove.com/api/keycloak-webhook}
+    - TARGET_WEBHOOK_SECRET=${KC_WEBHOOK_SECRET}
+    - TARGET_WEBHOOK_EVENT_TYPES=${KC_WEBHOOK_EVENT_TYPES:-UPDATE_PROFILE,VERIFY_EMAIL}
+    - PROSODY_MODE=client
+    - JICOFO_AUTH_PASSWORD=${JICOFO_AUTH_PASSWORD}
+    - JVB_AUTH_PASSWORD=${JVB_AUTH_PASSWORD}
+    - JVB_AUTH_USER=jvb
+    - PROSODY_TRUSTED_PROXIES_CIDR=${PROSODY_TRUSTED_PROXIES_CIDR:-172.18.0.0/16}
+    - XMPP_DOMAIN=${XMPP_DOMAIN}
+    - XMPP_AUTH_DOMAIN=auth.${XMPP_DOMAIN}
+    - XMPP_RECORDER_DOMAIN=recorder.${XMPP_DOMAIN}
+    - KC_HOST_URL=${KC_HOST_URL}
+    - CF_TURN_APP_ID=${CF_TURN_APP_ID}
+    - CF_TURN_APP_SECRET=${CF_TURN_APP_SECRET}
+    - CF_API_BEARER=${CF_API_BEARER}
+    - CF_API_DOMAIN=${CF_API_DOMAIN}
+    - JICOFO_OCTO_REGION=${JICOFO_OCTO_REGION}
+
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    user: "0:0" # Run as root to access Docker socket and container logs
+    <<: [*common-config, *common-environment]
+    volumes:
+      - ./otel-config.yml:/etc/otelcol-contrib/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    labels:
+      - "app=otel-collector"
+
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 60s
+      timeout: 5s
+      retries: 10
+    <<: [*common-config, *common-environment]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    labels:
+      - "app=postgres"
+    ports:
+      - "0.0.0.0:5432:5432"
+
+
+  drizzle-gateway:
+    image: ghcr.io/drizzle-team/gateway:latest
+    container_name: drizzle-gateway
+    depends_on:
+      postgres:
+        condition: service_healthy
+    <<: *common-config
+    environment:
+      PORT: 4983
+      STORE_PATH: /app
+      MASTERPASS: ${DRIZZLE_MASTERPASS}
+    volumes:
+      - drizzle_gateway_data:/app
+    labels:
+      - "app=drizzle-gateway"
+    ports:
+      - "127.0.0.1:4983:4983"
+
+
+  keycloak:
+    build:
+      context: ./keycloak
+      dockerfile: Dockerfile
+    container_name: keycloak
+    entrypoint: ["/opt/keycloak/entrypoint.sh"]
+    command:
+      [
+        "start",
+        "--optimized",
+        "--import-realm",
+        "--spi-events-listener-ext-event-webhook-store-webhook-events=true",
+      ]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/auth/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s # Give Keycloak some time to start up before first health check
+    depends_on:
+      postgres:
+        condition: service_healthy
+    <<: [*common-config, *common-environment]
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/realm-template.json:ro # Mount as template, not in import directory
+      - ./keycloak/entrypoint.sh:/opt/keycloak/entrypoint.sh:ro # Mount the entrypoint script
+    labels:
+      - "app=keycloak"
+    ports:
+      - "127.0.0.1:3000:8080"
+      - "127.0.0.1:9000:9000"
+
+
+  keycloak-webhook-setup:
+    build:
+      context: ./keycloak/setup
+      dockerfile: Dockerfile
+    container_name: keycloak-webhook-setup
+    restart: no
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    <<: [*common-environment]
+    labels:
+      - "app=keycloak-webhook-setup"
+
+
+  prosody:
+    image: jitsi/prosody:stable-10532-1
+    container_name: prosody
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5280/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    <<: [*common-config, *common-environment]
+    volumes:
+      # Override the default plugins with our own
+      - ./prosody/plugins/token/util.lib.lua:/prosody-plugins/token/util.lib.lua:ro
+      - ./prosody/plugins/luajwtjitsi.lib.lua:/prosody-plugins/luajwtjitsi.lib.lua:ro
+      - ./prosody/plugins/custom:/prosody-plugins-custom:ro
+      - prosody-data:/config/data
+      - ./prosody/certs:/config/certs
+      - ./prosody/custom-prosodyBase.cfg.lua:/defaults/prosody.cfg.lua:ro
+      - ./prosody/custom-prosody.cfg.lua:/defaults/conf.d/jitsi-meet.cfg.lua:ro
+    labels:
+      - "app=prosody"
+    ports:
+      # XMPP TCP client port for remote jvbs
+      - "0.0.0.0:5222:5222"
+      # - "5269"  # S2S
+      - "127.0.0.1:5347:5347" # Component protocol
+      # XMPP client port proxied by nginx (BOSH, Websockets)
+      - "127.0.0.1:5280:5280"
+
+
+  jicofo:
+    image: jitsi/jicofo:stable-10532-1
+    container_name: jicofo
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -f http://localhost:8888/about/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      prosody:
+        condition: service_healthy
+    <<: [*common-config, *common-environment]
+    volumes:
+      - ./prosody/custom-jicofo.conf:/defaults/jicofo.conf:ro
+      - ./prosody/custom-logging.properties:/defaults/logging.properties:ro
+    labels:
+      - "app=jicofo"
+    ports:
+      # REST including metrics, conference-request, etc.
+      - "127.0.0.1:8888:8888"
+
+
+volumes:
+  postgres_data:
+    name: postgres_data
+  drizzle_gateway_data:
+    name: drizzle_gateway_data
+  prosody-data:
+    name: prosody-data

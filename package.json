@@ -1,10 +1,10 @@
 {
   "name": "sona-config",
-  "module": "index.ts",
   "type": "module",
   "private": true,
   "scripts": {
-    "fetch-config": "bun run config-tools/main.ts"
+    "fetch-config": "bun setup/main.ts",
+    "compile-nginx": "bun setup/nginx-compiler.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"

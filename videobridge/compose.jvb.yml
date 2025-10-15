@@ -1,8 +1,18 @@
+
+x-common-config: &common-config
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      labels: "app"
+
+
 services:
   jvb:
     image: jitsi/jvb:stable-10532-1
     container_name: jvb
-    restart: unless-stopped
     healthcheck:
       test:
         ["CMD-SHELL", "curl -f http://localhost:8080/debug?full=true || exit 1"]
@@ -10,6 +20,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    <<: *common-config
     volumes:
       - ./custom-jvb.conf:/defaults/jvb.conf:ro
       - ./custom-logging.properties:/defaults/logging.properties:ro
@@ -21,6 +32,8 @@ services:
       - JVB_INSTANCE_ID=${JVB_INSTANCE_ID}
       - JVB_OCTO_REGION=${JVB_OCTO_REGION}
       # LOCAL_ADDRESS calculated by entry script.
+    labels:
+      - "app=jvb"
     ports:
       # ICE/UDP port for media
       - "10000:10000/udp"
@@ -29,16 +42,4 @@ services:
     expose:
       # Private API for control and metrics
       - "8080"
-    networks:
-      - proxy-network
-    logging:
-      driver: json-file
-      options:
-        labels: "app"
-    labels:
-      - "app=jvb"
 
-networks:
-  proxy-network:
-    external: true
-    name: proxy-network
