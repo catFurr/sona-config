@@ -25,8 +25,8 @@ http_default_host = "{{ .Env.XMPP_DOMAIN }}"
 
 -- https://prosody.im/doc/modules/mod_smacks
 smacks_max_unacked_stanzas = 5;
-smacks_hibernation_time = 60;
-smacks_max_old_sessions = 10;  -- Increased from 1 to allow more session resumptions
+smacks_hibernation_time = 30;
+smacks_max_old_sessions = 1;
 
 
 VirtualHost "{{ .Env.XMPP_DOMAIN }}"
@@ -68,7 +68,7 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
     -- smacks_max_hibernated_sessions = 1
 
 VirtualHost "guest.{{ .Env.XMPP_DOMAIN }}"
-    authentication = "anonymous"
+    authentication = "jitsi-anonymous"
     modules_enabled = {
         "smacks"; -- XEP-0198: Stream Management
     }

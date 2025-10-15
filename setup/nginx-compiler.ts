@@ -132,6 +132,7 @@ async function main(): Promise<void> {
       "general.conf",
       "services.conf",
       "posthog.conf",
+      "keycloak.conf"
     ];
 
     // Check for existing files and warn user
