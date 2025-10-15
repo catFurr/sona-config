@@ -68,7 +68,7 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
     -- smacks_max_hibernated_sessions = 1
 
 VirtualHost "guest.{{ .Env.XMPP_DOMAIN }}"
-    authentication = "anonymous"
+    authentication = "jitsi-anonymous"
     modules_enabled = {
         "smacks"; -- XEP-0198: Stream Management
     }
